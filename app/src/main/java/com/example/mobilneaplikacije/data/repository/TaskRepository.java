@@ -5,8 +5,8 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
-import  com.example.mobilneaplikacije.data.db.AppDatabase;
-import  com.example.mobilneaplikacije.data.model.Task;
+import com.example.mobilneaplikacije.data.db.AppDatabase;
+import com.example.mobilneaplikacije.data.model.Task;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -41,11 +41,14 @@ public class TaskRepository {
         return id;
     }
 
-    // Get all
+    // Get all + auto označavanje "MISSED"
     public List<Task> getAllTasks() {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor cursor = db.rawQuery("SELECT * FROM Task", null);
+
+        long now = System.currentTimeMillis();
+        long threeDaysAgo = now - 3L * 24 * 60 * 60 * 1000;
 
         if (cursor.moveToFirst()) {
             do {
@@ -64,6 +67,13 @@ public class TaskRepository {
                 task.setXpPoints(cursor.getInt(cursor.getColumnIndexOrThrow("xpPoints")));
                 task.setStatus(cursor.getString(cursor.getColumnIndexOrThrow("status")));
                 task.setDueDateTime(cursor.getLong(cursor.getColumnIndexOrThrow("dueDateTime")));
+
+                // 🚨 Automatski označi kao MISSED ako je ACTIVE i prošlo više od 3 dana
+                if ("ACTIVE".equals(task.getStatus()) && task.getDueDateTime() < threeDaysAgo) {
+                    task.setStatus("MISSED");
+                    updateTaskStatus(task.getId(), "MISSED");
+                }
+
                 tasks.add(task);
             } while (cursor.moveToNext());
         }
@@ -93,8 +103,6 @@ public class TaskRepository {
         db.close();
     }
 
-
-    // Update status
     public void updateTaskStatus(long id, String status) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -103,7 +111,6 @@ public class TaskRepository {
         db.close();
     }
 
-    // Delete
     public void deleteTask(long id) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         db.delete("Task", "id=?", new String[]{String.valueOf(id)});
@@ -130,6 +137,13 @@ public class TaskRepository {
             t.setXpPoints(c.getInt(c.getColumnIndexOrThrow("xpPoints")));
             t.setStatus(c.getString(c.getColumnIndexOrThrow("status")));
             t.setDueDateTime(c.getLong(c.getColumnIndexOrThrow("dueDateTime")));
+
+            // 🚨 Provera i za pojedinačan upit
+            long threeDaysAgo = System.currentTimeMillis() - 3L * 24 * 60 * 60 * 1000;
+            if ("ACTIVE".equals(t.getStatus()) && t.getDueDateTime() < threeDaysAgo) {
+                t.setStatus("MISSED");
+                updateTaskStatus(t.getId(), "MISSED");
+            }
         }
         c.close();
         db.close();
@@ -168,7 +182,7 @@ public class TaskRepository {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         long start = cal.getTimeInMillis();
-        long end = start + 24L*60*60*1000 - 1;
+        long end = start + 24L * 60 * 60 * 1000 - 1;
         return countCompletionsBetween(difficulty, importance, start, end);
     }
 
@@ -180,7 +194,7 @@ public class TaskRepository {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         long start = cal.getTimeInMillis();
-        long end = start + 7L*24*60*60*1000 - 1;
+        long end = start + 7L * 24 * 60 * 60 * 1000 - 1;
         return countCompletionsBetween(difficulty, importance, start, end);
     }
 

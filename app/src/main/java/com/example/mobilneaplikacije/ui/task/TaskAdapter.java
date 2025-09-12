@@ -1,5 +1,6 @@
 package com.example.mobilneaplikacije.ui.task;
 
+import android.annotation.SuppressLint;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,6 +23,13 @@ public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder
     public TaskAdapter(List<Task> tasks, OnTaskClickListener listener) {
         this.tasks = tasks;
         this.listener = listener;
+    }
+
+    // 🔹 DODAJ OVO
+    @SuppressLint("NotifyDataSetChanged")
+    public void updateData(List<Task> newTasks) {
+        this.tasks = newTasks;
+        notifyDataSetChanged(); // obavesti RecyclerView da ponovo nacrta listu
     }
 
     @NonNull
@@ -55,21 +63,22 @@ public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder
         }
 
         public void bind(Task task, OnTaskClickListener listener) {
-            String extra = "";
             tvTitle.setText(task.getTitle());
             tvCategory.setText("Kategorija: " + task.getCategoryId());
             tvStatus.setText("Status: " + task.getStatus());
             tvXP.setText("XP: " + task.getXpPoints());
+
             if (task.isRecurring()) {
-                String unit = "DAY".equals(task.getRepeatUnit()) ? "dan" : "nedelja";
-                extra = " • Ponavlja se na " + task.getRepeatInterval() + " " + unit +
-                        " do " + new java.text.SimpleDateFormat("dd.MM.yyyy")
-                        .format(new java.util.Date(task.getEndDate()));
-            } else if (task.getDueDateTime() > 0) {
-                extra = " • " + new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm")
-                        .format(new java.util.Date(task.getDueDateTime()));
+                tvStatus.append("\nPonavlja se svaka " + task.getRepeatInterval() + " "
+                        + task.getRepeatUnit() + " do "
+                        + new java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                        .format(new java.util.Date(task.getEndDate())));
+            } else {
+                tvStatus.append("\nRok: " +
+                        new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
+                                .format(new java.util.Date(task.getDueDateTime())));
             }
-            tvTitle.setText(task.getTitle() + extra);
+
             itemView.setOnClickListener(v -> listener.onTaskClick(task));
         }
     }

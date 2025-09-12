@@ -26,7 +26,6 @@ public class TaskDetailFragment extends Fragment {
 
     public TaskDetailFragment() {}
 
-    // Factory metoda za kreiranje novog fragmenta sa prosleđenim ID-jem zadatka
     public static TaskDetailFragment newInstance(long taskId) {
         TaskDetailFragment fragment = new TaskDetailFragment();
         Bundle args = new Bundle();
@@ -60,17 +59,25 @@ public class TaskDetailFragment extends Fragment {
         btnDelete = view.findViewById(R.id.btnDelete);
         btnEdit = view.findViewById(R.id.btnEdit);
 
+        TaskRepository repo = new TaskRepository(requireContext());
+
+        // ✏️ Edit
         btnEdit.setOnClickListener(v -> {
-            TaskRepository repo = new TaskRepository(requireContext());
-            for (Task t : repo.getAllTasks()) {
-                if (t.getId() == taskId) {
-                    if (t.isRecurring() && t.getDueDateTime() < System.currentTimeMillis()) {
-                        Toast.makeText(getContext(),
-                                "Ne možeš menjati prošle pojave ponavljajućeg zadatka!",
-                                Toast.LENGTH_LONG).show();
-                        return; // prekini edit
-                    }
-                }
+            Task t = repo.getTaskById(taskId);
+            if (t == null) return;
+
+            if ("DONE".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus()) || "MISSED".equals(t.getStatus())) {
+                Toast.makeText(getContext(),
+                        "Ne možeš menjati završene, propuštene ili otkazane zadatke!",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            if (t.isRecurring() && t.getDueDateTime() < System.currentTimeMillis()) {
+                Toast.makeText(getContext(),
+                        "Ne možeš menjati prošle pojave ponavljajućeg zadatka!",
+                        Toast.LENGTH_LONG).show();
+                return;
             }
 
             AddTaskFragment fragment = AddTaskFragment.newInstanceForEdit(taskId);
@@ -81,18 +88,18 @@ public class TaskDetailFragment extends Fragment {
                     .commit();
         });
 
-        loadTaskDetails();
-
-        TaskRepository repo = new TaskRepository(requireContext());
-
+        // ✅ DONE
         btnMarkDone.setOnClickListener(v -> {
             Task t = repo.getTaskById(taskId);
             if (t == null) return;
 
-            // 1) Prebaci u DONE
+            if (!"ACTIVE".equals(t.getStatus())) {
+                Toast.makeText(getContext(), "Samo aktivni zadaci mogu biti završeni!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
             repo.updateTaskStatus(taskId, "DONE");
 
-            // 2) Provera kvote
             int countToday = repo.countToday(t.getDifficulty(), t.getImportance());
             int countWeek = repo.countThisWeek(t.getDifficulty(), t.getImportance());
             int countMonth = repo.countThisMonth(t.getDifficulty(), t.getImportance());
@@ -102,7 +109,6 @@ public class TaskDetailFragment extends Fragment {
 
             int awarded = canEarn ? t.getXpPoints() : 0;
 
-            // 3) Saberi XP u SharedPreferences (profil)
             if (awarded > 0) {
                 android.content.SharedPreferences prefs =
                         requireContext().getSharedPreferences("profile", android.content.Context.MODE_PRIVATE);
@@ -110,7 +116,6 @@ public class TaskDetailFragment extends Fragment {
                 prefs.edit().putInt("total_xp", current + awarded).apply();
             }
 
-            // 4) Loguj završetak (za buduća brojanja)
             repo.logCompletion(taskId, System.currentTimeMillis(), t.getDifficulty(), t.getImportance(), awarded);
 
             Toast.makeText(getContext(),
@@ -120,40 +125,82 @@ public class TaskDetailFragment extends Fragment {
             loadTaskDetails();
         });
 
-
+        // ⏸ PAUSE ↔ ACTIVATE
         btnPause.setOnClickListener(v -> {
-            repo.updateTaskStatus(taskId, "PAUSED");
-            Toast.makeText(getContext(), "Zadatak pauziran", Toast.LENGTH_SHORT).show();
+            Task t = repo.getTaskById(taskId);
+            if (t == null) return;
+
+            if (!t.isRecurring()) {
+                Toast.makeText(getContext(), "Samo ponavljajući zadaci mogu biti pauzirani!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            if ("PAUSED".equals(t.getStatus())) {
+                repo.updateTaskStatus(taskId, "ACTIVE");
+                Toast.makeText(getContext(), "Zadatak ponovo aktiviran", Toast.LENGTH_SHORT).show();
+            } else if ("ACTIVE".equals(t.getStatus())) {
+                repo.updateTaskStatus(taskId, "PAUSED");
+                Toast.makeText(getContext(), "Zadatak pauziran", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(getContext(), "Ova akcija nije dozvoljena!", Toast.LENGTH_SHORT).show();
+            }
             loadTaskDetails();
         });
 
+        // ❌ CANCEL
         btnCancel.setOnClickListener(v -> {
+            Task t = repo.getTaskById(taskId);
+            if (t == null) return;
+
+            if (!"ACTIVE".equals(t.getStatus())) {
+                Toast.makeText(getContext(), "Samo aktivni zadaci mogu biti otkazani!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
             repo.updateTaskStatus(taskId, "CANCELLED");
             Toast.makeText(getContext(), "Zadatak otkazan", Toast.LENGTH_SHORT).show();
             loadTaskDetails();
         });
 
+        // 🗑 DELETE
         btnDelete.setOnClickListener(v -> {
-            repo.deleteTask(taskId);
-            Toast.makeText(getContext(), "Zadatak obrisan", Toast.LENGTH_SHORT).show();
+            Task t = repo.getTaskById(taskId);
+            if (t == null) return;
+
+            if ("DONE".equals(t.getStatus()) || "MISSED".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus())) {
+                Toast.makeText(getContext(),
+                        "Ne možeš obrisati završene, propuštene ili otkazane zadatke!",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            if (t.isRecurring()) {
+                t.setEndDate(System.currentTimeMillis());
+                repo.updateTask(t);
+                Toast.makeText(getContext(), "Ponavljajući zadatak skraćen (obrisana buduća ponavljanja)", Toast.LENGTH_SHORT).show();
+            } else {
+                repo.deleteTask(taskId);
+                Toast.makeText(getContext(), "Zadatak obrisan", Toast.LENGTH_SHORT).show();
+            }
+
             requireActivity().onBackPressed();
         });
 
+        loadTaskDetails();
         return view;
     }
 
     private void loadTaskDetails() {
         TaskRepository repo = new TaskRepository(requireContext());
-        for (Task t : repo.getAllTasks()) {
-            if (t.getId() == taskId) {
-                tvTitle.setText(t.getTitle());
-                tvDescription.setText(t.getDescription());
-                tvCategory.setText("Kategorija: " + t.getCategoryId());
-                tvDifficulty.setText("Težina: " + t.getDifficulty());
-                tvImportance.setText("Bitnost: " + t.getImportance());
-                tvXpPoints.setText("XP: " + t.getXpPoints());
-                tvStatus.setText("Status: " + t.getStatus());
-            }
+        Task t = repo.getTaskById(taskId);
+        if (t != null) {
+            tvTitle.setText(t.getTitle());
+            tvDescription.setText(t.getDescription());
+            tvCategory.setText("Kategorija: " + t.getCategoryId());
+            tvDifficulty.setText("Težina: " + t.getDifficulty());
+            tvImportance.setText("Bitnost: " + t.getImportance());
+            tvXpPoints.setText("XP: " + t.getXpPoints());
+            tvStatus.setText("Status: " + t.getStatus());
         }
     }
 }

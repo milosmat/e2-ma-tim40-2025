@@ -17,10 +17,14 @@ import com.example.mobilneaplikacije.data.repository.TaskRepository;
 
 import java.util.List;
 
+import com.google.android.material.tabs.TabLayout;
+import java.util.stream.Collectors;
+
 public class TaskListFragment extends Fragment {
 
     private RecyclerView recyclerTasks;
     private TaskAdapter adapter;
+    private List<Task> allTasks;
 
     public TaskListFragment() {}
 
@@ -35,10 +39,14 @@ public class TaskListFragment extends Fragment {
         recyclerTasks.setLayoutManager(new LinearLayoutManager(getContext()));
 
         TaskRepository repo = new TaskRepository(requireContext());
-        List<Task> tasks = repo.getAllTasks();
+        allTasks = repo.getAllTasks();
+        long now = System.currentTimeMillis();
+        allTasks = repo.getAllTasks()
+                .stream()
+                .filter(t -> hasFutureOccurrence(t, now))
+                .collect(Collectors.toList());
 
-        adapter = new TaskAdapter(tasks, task -> {
-            // Klik na item otvara detalje
+        adapter = new TaskAdapter(allTasks, task -> {
             TaskDetailFragment fragment = TaskDetailFragment.newInstance(task.getId());
             requireActivity().getSupportFragmentManager()
                     .beginTransaction()
@@ -46,9 +54,50 @@ public class TaskListFragment extends Fragment {
                     .addToBackStack(null)
                     .commit();
         });
-
         recyclerTasks.setAdapter(adapter);
 
+        // Dodaj tabove
+        TabLayout tabLayout = view.findViewById(R.id.tabLayout);
+        tabLayout.addTab(tabLayout.newTab().setText("Svi"));
+        tabLayout.addTab(tabLayout.newTab().setText("Jednokratni"));
+        tabLayout.addTab(tabLayout.newTab().setText("Ponavljajući"));
+
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                filterTasks(tab.getPosition());
+            }
+            @Override public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override public void onTabReselected(TabLayout.Tab tab) {}
+        });
+
         return view;
+    }
+
+    private boolean hasFutureOccurrence(Task t, long now) {
+        if (!t.isRecurring()) return t.getDueDateTime() >= now;
+
+        // ima budućih pojavljivanja ako endDate >= now
+        if (t.getEndDate() < now) return false;
+
+        // opcionalno: preciznije – tražimo prvu pojavu u [now, now + 1 god]
+        long year = 365L*24*60*60*1000;
+        return !com.example.mobilneaplikacije.util.TaskUtils
+                .generateOccurrencesBetween(t, now, now + year, 1).isEmpty();
+    }
+    private void filterTasks(int tabIndex) {
+        List<Task> filtered;
+        if (tabIndex == 1) {
+            filtered = allTasks.stream()
+                    .filter(t -> !t.isRecurring())
+                    .collect(Collectors.toList());
+        } else if (tabIndex == 2) {
+            filtered = allTasks.stream()
+                    .filter(Task::isRecurring)
+                    .collect(Collectors.toList());
+        } else {
+            filtered = allTasks;
+        }
+        adapter.updateData(filtered);
     }
 }
