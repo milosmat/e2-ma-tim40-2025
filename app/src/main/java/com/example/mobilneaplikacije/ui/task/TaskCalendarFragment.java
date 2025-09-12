@@ -5,11 +5,12 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CalendarView;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Task;
@@ -17,6 +18,7 @@ import com.example.mobilneaplikacije.data.repository.TaskRepository;
 import com.example.mobilneaplikacije.util.TaskUtils;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -24,7 +26,9 @@ import java.util.Locale;
 public class TaskCalendarFragment extends Fragment {
 
     private CalendarView calendarView;
-    private TextView tvSelectedTasks;
+    private RecyclerView recyclerDayTasks;
+    private DayTaskAdapter dayAdapter;
+    private List<Task> allTasks;
 
     public TaskCalendarFragment() {}
 
@@ -36,39 +40,45 @@ public class TaskCalendarFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_task_calendar, container, false);
 
         calendarView = view.findViewById(R.id.calendarView);
-        tvSelectedTasks = view.findViewById(R.id.tvSelectedTasks);
+        recyclerDayTasks = view.findViewById(R.id.recyclerDayTasks);
+        recyclerDayTasks.setLayoutManager(new LinearLayoutManager(getContext()));
+
+        dayAdapter = new DayTaskAdapter(new ArrayList<>(), task -> {
+            TaskDetailFragment fragment = TaskDetailFragment.newInstance(task.getId());
+            requireActivity().getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.fragment_container, fragment)
+                    .addToBackStack(null)
+                    .commit();
+        });
+        recyclerDayTasks.setAdapter(dayAdapter);
 
         TaskRepository repo = new TaskRepository(requireContext());
-        List<Task> tasks = repo.getAllTasks();
+        allTasks = repo.getAllTasks();
 
+        // Kada korisnik promeni datum u kalendaru
         calendarView.setOnDateChangeListener((cv, year, month, dayOfMonth) -> {
             long selectedMillis = new Date(year - 1900, month, dayOfMonth).getTime();
-            StringBuilder sb = new StringBuilder();
+            long startOfDay = selectedMillis;
+            long endOfDay = selectedMillis + 24L * 60 * 60 * 1000 - 1;
+
+            List<Task> tasksForDay = new ArrayList<>();
             SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
-            for (Task t : tasks) {
+            for (Task t : allTasks) {
                 if (t.isRecurring()) {
-                    long startOfDay = selectedMillis;
-                    long endOfDay = selectedMillis + 24L * 60 * 60 * 1000 - 1;
-
                     List<Long> occ = TaskUtils.generateOccurrencesBetween(t, startOfDay, endOfDay, 100);
-                    for (Long occurrence : occ) {
-                        sb.append("• ").append(t.getTitle())
-                                .append(" (").append(sdf.format(new Date(occurrence))).append(")\n");
+                    if (!occ.isEmpty()) {
+                        tasksForDay.add(t);
                     }
                 } else {
                     if (isSameDay(t.getDueDateTime(), selectedMillis)) {
-                        sb.append("• ").append(t.getTitle())
-                                .append(" (").append(sdf.format(new Date(t.getDueDateTime()))).append(")\n");
+                        tasksForDay.add(t);
                     }
                 }
             }
 
-            if (sb.length() == 0) {
-                sb.append("Nema zadataka za ovaj datum.");
-            }
-
-            tvSelectedTasks.setText(sb.toString());
+            dayAdapter.updateData(tasksForDay);
         });
 
         return view;

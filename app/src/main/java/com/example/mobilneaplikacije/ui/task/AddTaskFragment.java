@@ -217,7 +217,7 @@ public class AddTaskFragment extends Fragment {
             task.setImportance(importance);
             task.setXpPoints(xp);
             task.setDueDateTime(pickedDateTime);
-            task.setStatus("NEW");
+            task.setStatus("ACTIVE");
             task.setRecurring(isRecurring);
             task.setRepeatInterval(repeatInterval);
             task.setRepeatUnit(repeatUnit);
