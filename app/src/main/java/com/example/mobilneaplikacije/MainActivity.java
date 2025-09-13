@@ -8,6 +8,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.mobilneaplikacije.ui.category.CategoryListFragment;
 import com.example.mobilneaplikacije.ui.task.AddTaskFragment;
 import com.example.mobilneaplikacije.ui.task.TaskCalendarFragment;
 import com.example.mobilneaplikacije.ui.task.TaskListFragment;
@@ -46,6 +47,12 @@ public class MainActivity extends AppCompatActivity {
                 getSupportFragmentManager()
                         .beginTransaction()
                         .replace(R.id.fragment_container, new TaskCalendarFragment())
+                        .commit();
+                return true;
+            }else if (id == R.id.nav_categories) {
+                getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.fragment_container, new CategoryListFragment())
                         .commit();
                 return true;
             }

@@ -8,7 +8,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
+import com.example.mobilneaplikacije.data.repository.TaskRepository;
+
 import java.util.List;
 
 public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder> {
@@ -64,7 +67,21 @@ public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder
 
         public void bind(Task task, OnTaskClickListener listener) {
             tvTitle.setText(task.getTitle());
-            tvCategory.setText("Kategorija: " + task.getCategoryId());
+
+            TaskRepository repo = new TaskRepository(itemView.getContext());
+            Category cat = repo.getCategoryById(task.getCategoryId());
+            if (cat != null) {
+                tvCategory.setText("Kategorija: " + cat.getName());
+                try {
+                    int color = android.graphics.Color.parseColor(cat.getColor());
+                    tvCategory.setTextColor(color); // oboji tekst
+                } catch (IllegalArgumentException e) {
+                    tvCategory.setTextColor(android.graphics.Color.BLACK);
+                }
+            } else {
+                tvCategory.setText("Kategorija: -");
+            }
+
             tvStatus.setText("Status: " + task.getStatus());
             tvXP.setText("XP: " + task.getXpPoints());
 

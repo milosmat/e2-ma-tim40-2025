@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
 import com.example.mobilneaplikacije.data.db.AppDatabase;
+import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
 
 import java.util.ArrayList;
@@ -210,5 +211,20 @@ public class TaskRepository {
         cal.add(Calendar.MILLISECOND, -1);
         long end = cal.getTimeInMillis();
         return countCompletionsBetween(difficulty, importance, start, end);
+    }
+
+    public Category getCategoryById(long id) {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT * FROM Category WHERE id=?", new String[]{String.valueOf(id)});
+        Category cat = null;
+        if (c.moveToFirst()) {
+            cat = new Category();
+            cat.setId(c.getLong(c.getColumnIndexOrThrow("id")));
+            cat.setName(c.getString(c.getColumnIndexOrThrow("name")));
+            cat.setColor(c.getString(c.getColumnIndexOrThrow("color")));
+        }
+        c.close();
+        db.close();
+        return cat;
     }
 }

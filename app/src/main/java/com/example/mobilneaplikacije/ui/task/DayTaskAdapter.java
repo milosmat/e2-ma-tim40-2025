@@ -8,7 +8,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
+import com.example.mobilneaplikacije.data.repository.TaskRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -66,11 +69,16 @@ public class DayTaskAdapter extends RecyclerView.Adapter<DayTaskAdapter.DayTaskV
             long when = task.isRecurring() ? task.getStartDate() : task.getDueDateTime();
             tvTime.setText(timeFmt.format(new Date(when)));
 
-            // boja kategorije (pretpostavljamo da je u Task.categoryColor ili preko helpera)
-            //String colorHex = task.getCategoryColor(); // ako nemaš polje, vidi helper dole
-            //try { viewColor.setBackgroundColor(Color.parseColor(colorHex)); }
-            //catch (Exception ignored) { viewColor.setBackgroundColor(0xFFBBBBBB); }
-
+            TaskRepository repo = new TaskRepository(itemView.getContext());
+            Category cat = repo.getCategoryById(task.getCategoryId());
+            if (cat != null) {
+                try {
+                    int color = android.graphics.Color.parseColor(cat.getColor());
+                    tvTitle.setTextColor(color); // boja naslova = boja kategorije
+                } catch (IllegalArgumentException e) {
+                    tvTitle.setTextColor(android.graphics.Color.BLACK);
+                }
+            }
             itemView.setOnClickListener(v -> listener.onTaskClick(task));
         }
     }

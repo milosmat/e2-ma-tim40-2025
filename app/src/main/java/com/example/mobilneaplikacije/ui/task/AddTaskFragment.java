@@ -19,11 +19,14 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
+import com.example.mobilneaplikacije.data.repository.CategoryRepository;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
 import com.example.mobilneaplikacije.util.XPUtils;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
@@ -39,6 +42,7 @@ public class AddTaskFragment extends Fragment {
     private Button btnPickDate, btnPickTime, btnSave, btnPickEndDate;
     private long pickedDateTime = 0; // millis
     private long pickedEndDate = 0;
+    private List<Category> categories;
 
     public AddTaskFragment() { }
 
@@ -73,12 +77,25 @@ public class AddTaskFragment extends Fragment {
         btnSave = view.findViewById(R.id.btnSave);
 
         // Spinner podaci
-        List<String> categories = Arrays.asList("Zdravlje", "Učenje", "Zabava", "Sređivanje");
+        CategoryRepository categoryRepo = new CategoryRepository(requireContext());
+        categories = categoryRepo.getAllCategories();
+
+        List<String> categoryNames = new ArrayList<>();
+        for (Category c : categories) {
+            categoryNames.add(c.getName());
+        }
+
+        ArrayAdapter<String> catAdapter = new ArrayAdapter<>(
+                requireContext(),
+                android.R.layout.simple_spinner_item,
+                categoryNames
+        );
+        catAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         List<String> difficulties = Arrays.asList("VEOMA_LAK", "LAK", "TEZAK", "EKSTREMNO_TEZAK");
         List<String> importances = Arrays.asList("NORMALAN", "VAŽAN", "EKSTREMNO_VAŽAN", "SPECIJALAN");
         List<String> repeatUnits = Arrays.asList("DAY", "WEEK");
 
-        spCategory.setAdapter(makeAdapter(categories));
+        spCategory.setAdapter(catAdapter);
         spDifficulty.setAdapter(makeAdapter(difficulties));
         spImportance.setAdapter(makeAdapter(importances));
         spRepeatUnit.setAdapter(makeAdapter(repeatUnits));
@@ -156,13 +173,22 @@ public class AddTaskFragment extends Fragment {
 
     private void loadTaskForEdit(long taskId) {
         TaskRepository repo = new TaskRepository(requireContext());
+
         for (Task t : repo.getAllTasks()) {
             if (t.getId() == taskId) {
                 etTitle.setText(t.getTitle());
                 etDescription.setText(t.getDescription());
                 setSpinnerSelection(spDifficulty, t.getDifficulty());
                 setSpinnerSelection(spImportance, t.getImportance());
-                setSpinnerSelection(spCategory, String.valueOf(t.getCategoryId()));
+                CategoryRepository categoryRepo = new CategoryRepository(requireContext());
+                categories = categoryRepo.getAllCategories(); // osveži listu ako treba
+
+                for (int i = 0; i < categories.size(); i++) {
+                    if (categories.get(i).getId() == t.getCategoryId()) {
+                        spCategory.setSelection(i);
+                        break;
+                    }
+                }
                 if (t.isRecurring()) {
                     switchRecurring.setChecked(true);
                     etRepeatInterval.setText(String.valueOf(t.getRepeatInterval()));
@@ -185,6 +211,9 @@ public class AddTaskFragment extends Fragment {
         String repeatUnit = null;
         long startDate = 0;
         long endDate = 0;
+
+        int selectedIndex = spCategory.getSelectedItemPosition();
+        long selectedCategoryId = categories.get(selectedIndex).getId();
 
         if (isRecurring) {
             String intervalText = etRepeatInterval.getText().toString().trim();
@@ -223,6 +252,7 @@ public class AddTaskFragment extends Fragment {
             task.setRepeatUnit(repeatUnit);
             task.setStartDate(startDate);
             task.setEndDate(endDate);
+            task.setCategoryId(selectedCategoryId);
 
             long id = repo.insertTask(task);
             if (id > 0) {
@@ -243,6 +273,7 @@ public class AddTaskFragment extends Fragment {
                     t.setRepeatUnit(repeatUnit);
                     t.setStartDate(startDate);
                     t.setEndDate(endDate);
+                    t.setCategoryId(selectedCategoryId);
 
                     repo.updateTask(t);
                     Toast.makeText(getContext(), "Zadatak izmenjen!", Toast.LENGTH_SHORT).show();
