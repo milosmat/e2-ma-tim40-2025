@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <!-- Naziv kategorije -->
+        <EditText
+            android:id="@+id/etCategoryName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Naziv kategorije"
+            android:inputType="textPersonName"
+            android:padding="12dp" />
+
+        <!-- Boja kategorije -->
+        <EditText
+            android:id="@+id/etCategoryColor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Boja (#RRGGBB)"
+            android:inputType="text"
+            android:padding="12dp"
+            android:layout_marginTop="12dp" />
+
+        <!-- Dugme za čuvanje -->
+        <Button
+            android:id="@+id/btnSaveCategory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sačuvaj kategoriju"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="@color/buttonBlue"
+            android:textColor="@android:color/white"/>
+    </LinearLayout>
+</ScrollView>

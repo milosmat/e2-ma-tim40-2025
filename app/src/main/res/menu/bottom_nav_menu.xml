@@ -12,4 +12,9 @@
         android:id="@+id/nav_calendar"
         android:icon="@android:drawable/ic_menu_my_calendar"
         android:title="Kalendar" />
+
+    <item
+        android:id="@+id/nav_categories"
+        android:title="Kategorije"
+        android:icon="@drawable/baseline_category_24" />
 </menu>
