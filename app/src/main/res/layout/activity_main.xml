@@ -8,12 +8,23 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <!-- Fragment container -->
+<!-- Gornji toolbar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary"
+        android:theme="@style/ThemeOverlay.MaterialComponents.Dark.ActionBar"
+        app:title="Moja Aplikacija"
+        app:menu="@menu/top_nav_bar" />
+
+    <!-- Container za fragmente -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/bottomNav" />
+        android:layout_height="608dp"
+        android:layout_marginTop="?attr/actionBarSize"
+        android:layout_marginBottom="30dp" /> <!-- visina bottomNav -->
 
     <!-- Navigacija na dnu -->
     <com.google.android.material.bottomnavigation.BottomNavigationView

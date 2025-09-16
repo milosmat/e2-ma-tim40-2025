@@ -18,7 +18,7 @@ public class CategoryRepository {
 
     public CategoryRepository(Context context) {
         this.context = context;
-        dbHelper = new AppDatabase(context);
+        dbHelper = AppDatabase.getInstance(context);
     }
 
     // ➕ Insert

@@ -17,7 +17,7 @@ public class TaskRepository {
     private AppDatabase dbHelper;
 
     public TaskRepository(Context context) {
-        dbHelper = new AppDatabase(context);
+        dbHelper = AppDatabase.getInstance(context);
     }
 
     // Insert
@@ -227,4 +227,26 @@ public class TaskRepository {
         db.close();
         return cat;
     }
+
+    public double calculateSuccessRate() {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+
+        // Broj završenih (DONE)
+        Cursor doneCursor = db.rawQuery("SELECT COUNT(*) FROM Task WHERE status='DONE'", null);
+        int done = 0;
+        if (doneCursor.moveToFirst()) done = doneCursor.getInt(0);
+        doneCursor.close();
+
+        // Broj ukupnih zadataka koji se računaju (ACTIVE + DONE + MISSED)
+        Cursor totalCursor = db.rawQuery("SELECT COUNT(*) FROM Task WHERE status!='PAUSED' AND status!='CANCELLED'", null);
+        int total = 0;
+        if (totalCursor.moveToFirst()) total = totalCursor.getInt(0);
+        totalCursor.close();
+
+        db.close();
+
+        if (total == 0) return 0.0;
+        return (done * 100.0) / total;
+    }
+
 }

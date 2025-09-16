@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="@android:color/holo_blue_light">
+
+    <!-- Animacija kovčega -->
+    <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/lavChest"
+        android:layout_width="300dp"
+        android:layout_height="300dp"
+        app:lottie_rawRes="@raw/chest"
+        app:lottie_autoPlay="false"
+        app:lottie_loop="false" />
+
+    <!-- Rezultati nagrada -->
+    <LinearLayout
+        android:id="@+id/llRewards"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginTop="24dp"
+        android:visibility="gone" />
+
+    <!-- Dugme za nastavak -->
+    <Button
+        android:id="@+id/btnContinue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Nastavi"
+        android:layout_marginTop="32dp"
+        android:visibility="gone"/>
+</LinearLayout>
