@@ -6,7 +6,16 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 public class AppDatabase extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "tasks.db";
-    private static final int DATABASE_VERSION = 2;
+    private static final int DATABASE_VERSION = 1;
+
+    private static AppDatabase instance;
+
+    public static synchronized AppDatabase getInstance(Context context) {
+        if (instance == null) {
+            instance = new AppDatabase(context.getApplicationContext());
+        }
+        return instance;
+    }
 
     public AppDatabase(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -43,15 +52,15 @@ public class AppDatabase extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion < 2) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS CompletionLog (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "taskId INTEGER," +
-                    "completedAt INTEGER," +
-                    "difficulty TEXT," +
-                    "importance TEXT," +
-                    "xpAwarded INTEGER," +
-                    "FOREIGN KEY(taskId) REFERENCES Task(id))");
-        }
+        db.execSQL("CREATE TABLE IF NOT EXISTS CompletionLog (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "taskId INTEGER," +
+                "completedAt INTEGER," +
+                "difficulty TEXT," +
+                "importance TEXT," +
+                "xpAwarded INTEGER," +
+                "FOREIGN KEY(taskId) REFERENCES Task(id))");
+
     }
+
 }

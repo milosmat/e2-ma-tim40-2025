@@ -13,8 +13,13 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.manager.LevelManager;
+import com.example.mobilneaplikacije.data.manager.SessionManager;
+import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.model.Task;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
+import com.example.mobilneaplikacije.ui.boss.BossFragment;
+import com.example.mobilneaplikacije.ui.equipment.EquipmentSelectionFragment;
 
 public class TaskDetailFragment extends Fragment {
 
@@ -109,12 +114,39 @@ public class TaskDetailFragment extends Fragment {
 
             int awarded = canEarn ? t.getXpPoints() : 0;
 
+            SessionManager session = new SessionManager(requireContext());
+            Player player = session.getPlayer();
+
             if (awarded > 0) {
-                android.content.SharedPreferences prefs =
-                        requireContext().getSharedPreferences("profile", android.content.Context.MODE_PRIVATE);
-                int current = prefs.getInt("total_xp", 0);
-                prefs.edit().putInt("total_xp", current + awarded).apply();
+                player.setXp(player.getXp() + awarded);
+
+                // 🔹 Proveri level-up
+                if (LevelManager.checkLevelUp(player)) {
+                    Toast.makeText(getContext(),
+                            "LEVEL UP! Sada si nivo " + player.getLevel() +
+                                    " (" + player.getTitle() + ")",
+                            Toast.LENGTH_LONG).show();
+
+                    TaskRepository repo2 = new TaskRepository(requireContext());
+                    double newRate = repo2.calculateSuccessRate();
+                    player.setSuccessRate(newRate);
+                    session.savePlayer(player);
+
+                    // 👉 Dodaj korisniku opremu (test)
+                    session.giveAllTestEquipment();
+
+                    // 👉 Pokreni BossFragment
+                    requireActivity().getSupportFragmentManager()
+                            .beginTransaction()
+                            .replace(R.id.fragment_container, new EquipmentSelectionFragment())
+                            .addToBackStack(null)
+                            .commit();
+                }
+
+
+                session.savePlayer(player);
             }
+
 
             repo.logCompletion(taskId, System.currentTimeMillis(), t.getDifficulty(), t.getImportance(), awarded);
 
