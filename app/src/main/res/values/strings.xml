@@ -1,3 +1,23 @@
 <resources>
     <string name="app_name">MobilneAplikacije</string>
+    <string name="trenutna_lozinka">Trenutna lozinka</string>
+    <string name="nova_lozinka">Nova lozinka</string>
+    <string name="ponovi_novu_lozinku">Ponovi novu lozinku</string>
+    <string name="email">Email</string>
+    <string name="lozinka">Lozinka</string>
+    <string name="prijavi_se">Prijavi se</string>
+    <string name="nemas_nalog_registruj_se">Nemas nalog? Registruj se</string>
+    <string name="username">Username</string>
+    <string name="nivo_1">Nivo: 1</string>
+    <string name="titula_pocetnik">Titula: Pocetnik</string>
+    <string name="pp_0">PP: 0</string>
+    <string name="xp_0">XP: 0</string>
+    <string name="novcici_0">Novcici: 0</string>
+    <string name="promeni_lozinku">Promeni lozinku</string>
+    <string name="zavrsene_misije_0">Zavrsene misije: 0</string>
+    <string name="odjavi_se">Odjavi se</string>
+    <string name="korisnicko_ime">Korisnicko ime</string>
+    <string name="izaberi_avatar">Izaberi avatar:</string>
+    <string name="ponovi_lozinku">Ponovi lozinku</string>
+    <string name="registruj_se">Registruj se</string>
 </resources>

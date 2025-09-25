@@ -21,37 +21,51 @@
             android:layout_height="wrap_content"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:text="Username"/>
+            android:text="@string/username"/>
 
         <TextView android:id="@+id/tvLevel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Nivo: 1"/>
+            android:text="@string/nivo_1"/>
 
         <TextView android:id="@+id/tvTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Titula: Početnik"/>
+            android:text="@string/titula_pocetnik"/>
 
         <TextView android:id="@+id/tvPP"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="PP: 40"/>
+            android:text="@string/pp_0"/>
 
         <TextView android:id="@+id/tvXP"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="XP: 0"/>
+            android:text="@string/xp_0"/>
 
         <TextView android:id="@+id/tvCoins"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Novčići: 0"/>
+            android:text="@string/novcici_0"/>
 
         <TextView android:id="@+id/tvMissions"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Završene misije: 0"/>
+            android:text="@string/zavrsene_misije_0"
+            android:layout_marginBottom="20dp"/>
+
+        <Button
+            android:id="@+id/btnChangePassword"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/promeni_lozinku"
+            android:layout_marginBottom="10dp"/>
+
+        <Button
+            android:id="@+id/btnLogout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/odjavi_se"/>
 
     </LinearLayout>
 </ScrollView>
