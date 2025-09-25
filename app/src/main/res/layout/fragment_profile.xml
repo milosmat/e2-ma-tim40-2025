@@ -20,39 +20,27 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="20sp"
-            android:textStyle="bold"
-            android:text="@string/username"/>
+            android:textStyle="bold"/>
 
         <TextView android:id="@+id/tvLevel"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nivo_1"/>
+            android:layout_height="wrap_content"/>
 
         <TextView android:id="@+id/tvTitle"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/titula_pocetnik"/>
+            android:layout_height="wrap_content"/>
 
         <TextView android:id="@+id/tvPP"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/pp_0"/>
+            android:layout_height="wrap_content"/>
 
         <TextView android:id="@+id/tvXP"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/xp_0"/>
+            android:layout_height="wrap_content"/>
 
         <TextView android:id="@+id/tvCoins"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/novcici_0"/>
-
-        <TextView android:id="@+id/tvMissions"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/zavrsene_misije_0"
-            android:layout_marginBottom="20dp"/>
+            android:layout_height="wrap_content"/>
 
         <Button
             android:id="@+id/btnChangePassword"
