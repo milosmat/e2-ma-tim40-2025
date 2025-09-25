@@ -21,7 +21,7 @@ public class CategoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
     private List<Category> categories;
     private OnCategoryClickListener listener;
-    private Runnable onAddClick; // callback za dodavanje
+    private Runnable onAddClick;
 
     public interface OnCategoryClickListener {
         void onCategoryClick(Category category);
@@ -57,23 +57,17 @@ public class CategoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         if (getItemViewType(position) == TYPE_ADD) {
             ((AddViewHolder) holder).bind(onAddClick);
         } else {
-            Category category = categories.get(position - 1); // -1 jer je prvi "Add"
+            Category category = categories.get(position - 1);
             ((CategoryViewHolder) holder).bind(category, listener);
         }
     }
 
     @Override
-    public int getItemCount() {
-        return categories.size() + 1; // +1 za "Dodaj novu kategoriju"
-    }
+    public int getItemCount() { return categories.size() + 1; }
 
     static class AddViewHolder extends RecyclerView.ViewHolder {
-        public AddViewHolder(@NonNull View itemView) {
-            super(itemView);
-        }
-        public void bind(Runnable onAddClick) {
-            itemView.setOnClickListener(v -> onAddClick.run());
-        }
+        public AddViewHolder(@NonNull View itemView) { super(itemView); }
+        public void bind(Runnable onAddClick) { itemView.setOnClickListener(v -> onAddClick.run()); }
     }
 
     static class CategoryViewHolder extends RecyclerView.ViewHolder {
@@ -88,10 +82,7 @@ public class CategoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         public void bind(Category category, OnCategoryClickListener listener) {
             tvName.setText(category.getName());
             tvColor.setText(category.getColor());
-            try {
-                tvColor.setBackgroundColor(Color.parseColor(category.getColor()));
-            } catch (Exception ignored) {}
-
+            try { tvColor.setBackgroundColor(Color.parseColor(category.getColor())); } catch (Exception ignored) {}
             itemView.setOnClickListener(v -> listener.onCategoryClick(category));
         }
     }
@@ -101,4 +92,3 @@ public class CategoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         notifyDataSetChanged();
     }
 }
-

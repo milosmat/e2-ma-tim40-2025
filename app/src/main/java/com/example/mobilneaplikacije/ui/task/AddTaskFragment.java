@@ -3,17 +3,11 @@ package com.example.mobilneaplikacije.ui.task;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.Spinner;
-import android.widget.Switch;
-import android.widget.Toast;
-
+import android.widget.*;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -26,31 +20,27 @@ import com.example.mobilneaplikacije.data.repository.TaskRepository;
 import com.example.mobilneaplikacije.util.XPUtils;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.List;
+import java.util.*;
 
 public class AddTaskFragment extends Fragment {
 
-    private static final String ARG_TASK_ID = "task_id";
-    private long editTaskId = -1; // ako je -1 → novi zadatak
+    private static final String ARG_TASK_ID_HASH = "task_id_hash";
+    private String editTaskIdHash = null;
 
     private EditText etTitle, etDescription, etRepeatInterval;
     private Spinner spCategory, spDifficulty, spImportance, spRepeatUnit;
     private SwitchMaterial switchRecurring;
     private Button btnPickDate, btnPickTime, btnSave, btnPickEndDate;
-    private long pickedDateTime = 0; // millis
+    private long pickedDateTime = 0;
     private long pickedEndDate = 0;
-    private List<Category> categories;
+    private List<Category> categories = new ArrayList<>();
 
     public AddTaskFragment() { }
 
-    // Factory metoda za otvaranje u "edit" modu
-    public static AddTaskFragment newInstanceForEdit(long taskId) {
+    public static AddTaskFragment newInstanceForEdit(String taskIdHash) {
         AddTaskFragment fragment = new AddTaskFragment();
         Bundle args = new Bundle();
-        args.putLong(ARG_TASK_ID, taskId);
+        args.putString(ARG_TASK_ID_HASH, taskIdHash);
         fragment.setArguments(args);
         return fragment;
     }
@@ -62,7 +52,6 @@ public class AddTaskFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_add_task, container, false);
 
-        // UI
         etTitle = view.findViewById(R.id.etTitle);
         etDescription = view.findViewById(R.id.etDescription);
         spCategory = view.findViewById(R.id.spCategory);
@@ -76,89 +65,77 @@ public class AddTaskFragment extends Fragment {
         btnPickTime = view.findViewById(R.id.btnPickTime);
         btnSave = view.findViewById(R.id.btnSave);
 
-        // Spinner podaci
-        CategoryRepository categoryRepo = new CategoryRepository(requireContext());
-        categories = categoryRepo.getAllCategories();
+        spDifficulty.setAdapter(makeAdapter(Arrays.asList("VEOMA_LAK","LAK","TEZAK","EKSTREMNO_TEZAK")));
+        spImportance.setAdapter(makeAdapter(Arrays.asList("NORMALAN","VAZAN","EKSTREMNO_VAZAN","SPECIJALAN")));
+        spRepeatUnit.setAdapter(makeAdapter(Arrays.asList("DAN","NEDELJA")));
 
-        List<String> categoryNames = new ArrayList<>();
-        for (Category c : categories) {
-            categoryNames.add(c.getName());
-        }
+        CategoryRepository catRepo = new CategoryRepository(requireContext());
+        catRepo.getAllCategories(new CategoryRepository.Callback<List<Category>>() {
+            @Override public void onSuccess(List<Category> data) {
+                categories = data != null ? data : new ArrayList<>();
+                List<String> names = new ArrayList<>();
+                for (Category c: categories) names.add(c.getName());
+                ArrayAdapter<String> catAdapter = new ArrayAdapter<>(
+                        requireContext(), android.R.layout.simple_spinner_item, names);
+                catAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                spCategory.setAdapter(catAdapter);
 
-        ArrayAdapter<String> catAdapter = new ArrayAdapter<>(
-                requireContext(),
-                android.R.layout.simple_spinner_item,
-                categoryNames
-        );
-        catAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        List<String> difficulties = Arrays.asList("VEOMA_LAK", "LAK", "TEZAK", "EKSTREMNO_TEZAK");
-        List<String> importances = Arrays.asList("NORMALAN", "VAŽAN", "EKSTREMNO_VAŽAN", "SPECIJALAN");
-        List<String> repeatUnits = Arrays.asList("DAY", "WEEK");
-
-        spCategory.setAdapter(catAdapter);
-        spDifficulty.setAdapter(makeAdapter(difficulties));
-        spImportance.setAdapter(makeAdapter(importances));
-        spRepeatUnit.setAdapter(makeAdapter(repeatUnits));
-
-        // Ako je došao task_id → edit mod
-        if (getArguments() != null && getArguments().containsKey(ARG_TASK_ID)) {
-            editTaskId = getArguments().getLong(ARG_TASK_ID);
-            loadTaskForEdit(editTaskId);
-        }
+                if (getArguments() != null && getArguments().containsKey(ARG_TASK_ID_HASH)) {
+                    editTaskIdHash = getArguments().getString(ARG_TASK_ID_HASH);
+                    loadTaskForEdit(editTaskIdHash);
+                }
+            }
+            @Override public void onError(Exception e) {
+                Toast.makeText(getContext(),"Greška pri učitavanju kategorija",Toast.LENGTH_LONG).show();
+            }
+        });
 
         LinearLayout layoutRecurring = view.findViewById(R.id.layoutRecurring);
         switchRecurring.setOnCheckedChangeListener((btn, checked) ->
                 layoutRecurring.setVisibility(checked ? View.VISIBLE : View.GONE));
 
-        // Date picker
         btnPickDate.setOnClickListener(v -> {
             Calendar calendar = Calendar.getInstance();
-            DatePickerDialog datePicker = new DatePickerDialog(requireContext(),
-                    (view1, year, month, day) -> {
-                        calendar.set(year, month, day);
+            DatePickerDialog dp = new DatePickerDialog(requireContext(),
+                    (view1, y, m, d) -> {
+                        calendar.set(y, m, d);
                         pickedDateTime = calendar.getTimeInMillis();
-                        Toast.makeText(getContext(), "Datum: " + day + "." + (month + 1) + "." + year, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Datum: " + d + "." + (m+1) + "." + y, Toast.LENGTH_SHORT).show();
                     },
-                    calendar.get(Calendar.YEAR),
-                    calendar.get(Calendar.MONTH),
-                    calendar.get(Calendar.DAY_OF_MONTH));
-            datePicker.show();
+                    calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH));
+            dp.show();
         });
 
         btnPickEndDate.setOnClickListener(v -> {
             Calendar calendar = Calendar.getInstance();
-            DatePickerDialog datePicker = new DatePickerDialog(requireContext(),
-                    (view1, year, month, day) -> {
-                        calendar.set(year, month, day);
+            DatePickerDialog dp = new DatePickerDialog(requireContext(),
+                    (view1, y, m, d) -> {
+                        calendar.set(y, m, d);
                         pickedEndDate = calendar.getTimeInMillis();
-                        Toast.makeText(getContext(),
-                                "Završetak: " + day + "." + (month + 1) + "." + year,
-                                Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Završetak: " + d + "." + (m+1) + "." + y, Toast.LENGTH_SHORT).show();
                     },
-                    calendar.get(Calendar.YEAR),
-                    calendar.get(Calendar.MONTH),
-                    calendar.get(Calendar.DAY_OF_MONTH));
-            datePicker.show();
+                    calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH));
+            dp.show();
         });
 
-        // Time picker
         btnPickTime.setOnClickListener(v -> {
             Calendar calendar = Calendar.getInstance();
-            TimePickerDialog timePicker = new TimePickerDialog(requireContext(),
+            TimePickerDialog tp = new TimePickerDialog(requireContext(),
                     (view12, hour, minute) -> {
-                        calendar.setTimeInMillis(pickedDateTime);
-                        calendar.set(Calendar.HOUR_OF_DAY, hour);
-                        calendar.set(Calendar.MINUTE, minute);
-                        pickedDateTime = calendar.getTimeInMillis();
+                        if (pickedDateTime == 0) pickedDateTime = System.currentTimeMillis();
+                        Calendar c = Calendar.getInstance();
+                        c.setTimeInMillis(pickedDateTime);
+                        c.set(Calendar.HOUR_OF_DAY, hour);
+                        c.set(Calendar.MINUTE, minute);
+                        pickedDateTime = c.getTimeInMillis();
                         Toast.makeText(getContext(), "Vreme: " + hour + ":" + minute, Toast.LENGTH_SHORT).show();
                     },
                     calendar.get(Calendar.HOUR_OF_DAY),
                     calendar.get(Calendar.MINUTE),
                     true);
-            timePicker.show();
+            tp.show();
         });
 
-        // Save
         btnSave.setOnClickListener(v -> saveTask());
 
         return view;
@@ -171,58 +148,60 @@ public class AddTaskFragment extends Fragment {
         return adapter;
     }
 
-    private void loadTaskForEdit(long taskId) {
+    private void loadTaskForEdit(String taskIdHash) {
         TaskRepository repo = new TaskRepository(requireContext());
-
-        for (Task t : repo.getAllTasks()) {
-            if (t.getId() == taskId) {
+        repo.getTaskById(taskIdHash, new TaskRepository.Callback<Task>() {
+            @Override public void onSuccess(Task t) {
+                if (t == null) { Toast.makeText(getContext(),"Task ne postoji",Toast.LENGTH_SHORT).show(); return; }
                 etTitle.setText(t.getTitle());
                 etDescription.setText(t.getDescription());
                 setSpinnerSelection(spDifficulty, t.getDifficulty());
                 setSpinnerSelection(spImportance, t.getImportance());
-                CategoryRepository categoryRepo = new CategoryRepository(requireContext());
-                categories = categoryRepo.getAllCategories(); // osveži listu ako treba
 
-                for (int i = 0; i < categories.size(); i++) {
-                    if (categories.get(i).getId() == t.getCategoryId()) {
-                        spCategory.setSelection(i);
-                        break;
+                for (int i=0;i<categories.size();i++) {
+                    if (categories.get(i).getIdHash().equals(t.getCategoryIdHash())) {
+                        spCategory.setSelection(i); break;
                     }
                 }
                 if (t.isRecurring()) {
                     switchRecurring.setChecked(true);
                     etRepeatInterval.setText(String.valueOf(t.getRepeatInterval()));
                     setSpinnerSelection(spRepeatUnit, t.getRepeatUnit());
+                    pickedDateTime = t.getStartDate();
+                    pickedEndDate = t.getEndDate();
+                } else {
+                    pickedDateTime = t.getDueDateTime();
                 }
-                pickedDateTime = t.getDueDateTime();
             }
-        }
+            @Override public void onError(Exception e) {
+                Toast.makeText(getContext(),"Greška pri učitavanju zadatka",Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void saveTask() {
         if (!validateInputs()) return;
+
+        int catIndex = spCategory.getSelectedItemPosition();
+        if (catIndex < 0 || catIndex >= categories.size()) {
+            Toast.makeText(getContext(), "Izaberi kategoriju", Toast.LENGTH_SHORT).show();
+            return;
+        }
         String title = etTitle.getText().toString().trim();
         String description = etDescription.getText().toString().trim();
         String difficulty = spDifficulty.getSelectedItem().toString();
         String importance = spImportance.getSelectedItem().toString();
 
         boolean isRecurring = switchRecurring.isChecked();
-        int repeatInterval = 0;
-        String repeatUnit = null;
-        long startDate = 0;
-        long endDate = 0;
-
-        int selectedIndex = spCategory.getSelectedItemPosition();
-        long selectedCategoryId = categories.get(selectedIndex).getId();
+        int repeatInterval = 0; String repeatUnit = null; long startDate = 0; long endDate = 0;
 
         if (isRecurring) {
             String intervalText = etRepeatInterval.getText().toString().trim();
-            if (intervalText.isEmpty()) {
+            if (TextUtils.isEmpty(intervalText)) {
                 Toast.makeText(getContext(), "Unesi interval ponavljanja!", Toast.LENGTH_SHORT).show();
-                return; // prekini save dok user ne unese
+                return;
             }
             repeatInterval = Integer.parseInt(intervalText);
-
             repeatUnit = spRepeatUnit.getSelectedItem().toString();
             if (pickedDateTime == 0 || pickedEndDate == 0) {
                 Toast.makeText(getContext(), "Izaberi datum početka i završetka!", Toast.LENGTH_SHORT).show();
@@ -232,68 +211,66 @@ public class AddTaskFragment extends Fragment {
             endDate = pickedEndDate;
         }
 
-
         int xp = XPUtils.calculateXP(difficulty, importance);
 
         TaskRepository repo = new TaskRepository(requireContext());
+        if (editTaskIdHash == null) {
+            Task t = new Task();
+            t.setTitle(title);
+            t.setDescription(description);
+            t.setDifficulty(difficulty);
+            t.setImportance(importance);
+            t.setXpPoints(xp);
+            t.setStatus("ACTIVE");
+            t.setRecurring(isRecurring);
+            t.setRepeatInterval(repeatInterval);
+            t.setRepeatUnit(repeatUnit);
+            t.setStartDate(startDate);
+            t.setEndDate(endDate);
+            t.setDueDateTime(isRecurring ? 0 : pickedDateTime);
+            t.setCategoryIdHash(categories.get(catIndex).getIdHash());
 
-        if (editTaskId == -1) {
-            // Novi zadatak
-            Task task = new Task();
-            task.setTitle(title);
-            task.setDescription(description);
-            task.setDifficulty(difficulty);
-            task.setImportance(importance);
-            task.setXpPoints(xp);
-            task.setDueDateTime(pickedDateTime);
-            task.setStatus("ACTIVE");
-            task.setRecurring(isRecurring);
-            task.setRepeatInterval(repeatInterval);
-            task.setRepeatUnit(repeatUnit);
-            task.setStartDate(startDate);
-            task.setEndDate(endDate);
-            task.setCategoryId(selectedCategoryId);
-
-            long id = repo.insertTask(task);
-            if (id > 0) {
-                Toast.makeText(getContext(), "Zadatak sačuvan!", Toast.LENGTH_SHORT).show();
-            }
-        } else {
-            // Update postojećeg
-            for (Task t : repo.getAllTasks()) {
-                if (t.getId() == editTaskId) {
-                    t.setTitle(title);
-                    t.setDescription(description);
-                    t.setDifficulty(difficulty);
-                    t.setImportance(importance);
-                    t.setXpPoints(xp);
-                    t.setDueDateTime(pickedDateTime);
-                    t.setRecurring(isRecurring);
-                    t.setRepeatInterval(repeatInterval);
-                    t.setRepeatUnit(repeatUnit);
-                    t.setStartDate(startDate);
-                    t.setEndDate(endDate);
-                    t.setCategoryId(selectedCategoryId);
-
-                    repo.updateTask(t);
-                    Toast.makeText(getContext(), "Zadatak izmenjen!", Toast.LENGTH_SHORT).show();
-                    break;
+            repo.insertTask(t, new TaskRepository.Callback<String>() {
+                @Override public void onSuccess(String idHash) {
+                    Toast.makeText(getContext(),"Zadatak sačuvan!",Toast.LENGTH_SHORT).show();
+                    requireActivity().getSupportFragmentManager().popBackStack();
                 }
-            }
-        }
+                @Override public void onError(Exception e) {
+                    Toast.makeText(getContext(),"Greška: "+e.getMessage(),Toast.LENGTH_LONG).show();
+                }
+            });
+        } else {
+            Task t = new Task();
+            t.setIdHash(editTaskIdHash);
+            t.setTitle(title);
+            t.setDescription(description);
+            t.setDifficulty(difficulty);
+            t.setImportance(importance);
+            t.setXpPoints(xp);
+            t.setRecurring(isRecurring);
+            t.setRepeatInterval(repeatInterval);
+            t.setRepeatUnit(repeatUnit);
+            t.setStartDate(startDate);
+            t.setEndDate(endDate);
+            t.setDueDateTime(isRecurring ? 0 : pickedDateTime);
+            t.setCategoryIdHash(categories.get(catIndex).getIdHash());
 
-        requireActivity().getSupportFragmentManager().popBackStack();
+            repo.updateTask(editTaskIdHash, t, new TaskRepository.Callback<Void>() {
+                @Override public void onSuccess(Void v) {
+                    Toast.makeText(getContext(),"Zadatak izmenjen!",Toast.LENGTH_SHORT).show();
+                    requireActivity().getSupportFragmentManager().popBackStack();
+                }
+                @Override public void onError(Exception e) {
+                    Toast.makeText(getContext(),"Greška: "+e.getMessage(),Toast.LENGTH_LONG).show();
+                }
+            });
+        }
     }
 
     private void setSpinnerSelection(Spinner spinner, String value) {
         ArrayAdapter adapter = (ArrayAdapter) spinner.getAdapter();
-        if (adapter != null) {
-            for (int i = 0; i < adapter.getCount(); i++) {
-                if (adapter.getItem(i).toString().equals(value)) {
-                    spinner.setSelection(i);
-                    break;
-                }
-            }
+        if (adapter != null) for (int i = 0; i < adapter.getCount(); i++) {
+            if (adapter.getItem(i).toString().equals(value)) { spinner.setSelection(i); break; }
         }
     }
 
@@ -302,21 +279,18 @@ public class AddTaskFragment extends Fragment {
             Toast.makeText(getContext(), "Unesi naziv zadatka.", Toast.LENGTH_SHORT).show();
             return false;
         }
-        if (pickedDateTime == 0) {
-            Toast.makeText(getContext(), "Izaberi datum početka / due datum.", Toast.LENGTH_SHORT).show();
+        if (!switchRecurring.isChecked() && pickedDateTime == 0) {
+            Toast.makeText(getContext(), "Izaberi due datum/vreme.", Toast.LENGTH_SHORT).show();
             return false;
         }
-
         if (switchRecurring.isChecked()) {
             String intervalText = etRepeatInterval.getText().toString().trim();
             if (intervalText.isEmpty()) {
                 Toast.makeText(getContext(), "Unesi interval ponavljanja.", Toast.LENGTH_SHORT).show();
                 return false;
             }
-            int interval = 0;
-            try {
-                interval = Integer.parseInt(intervalText);
-            } catch (NumberFormatException ignored) {}
+            int interval;
+            try { interval = Integer.parseInt(intervalText); } catch (NumberFormatException e) { interval = 0; }
             if (interval <= 0) {
                 Toast.makeText(getContext(), "Interval mora biti pozitivan broj.", Toast.LENGTH_SHORT).show();
                 return false;

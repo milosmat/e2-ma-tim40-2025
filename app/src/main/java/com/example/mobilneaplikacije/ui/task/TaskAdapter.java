@@ -1,6 +1,5 @@
 package com.example.mobilneaplikacije.ui.task;
 
-import android.annotation.SuppressLint;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,54 +9,45 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
-import com.example.mobilneaplikacije.data.repository.TaskRepository;
 
-import java.util.List;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder> {
 
+    public interface OnTaskClickListener { void onTaskClick(Task task); }
+
     private List<Task> tasks;
-    private OnTaskClickListener listener;
+    private final OnTaskClickListener listener;
+    private final Map<String, Category> categoryMap;
+    private final SimpleDateFormat dateFmt = new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault());
 
-    public interface OnTaskClickListener {
-        void onTaskClick(Task task);
-    }
-
-    public TaskAdapter(List<Task> tasks, OnTaskClickListener listener) {
+    public TaskAdapter(List<Task> tasks, Map<String,Category> categoryMap, OnTaskClickListener listener) {
         this.tasks = tasks;
         this.listener = listener;
+        this.categoryMap = categoryMap != null ? categoryMap : new HashMap<>();
     }
 
-    // 🔹 DODAJ OVO
-    @SuppressLint("NotifyDataSetChanged")
     public void updateData(List<Task> newTasks) {
-        this.tasks = newTasks;
-        notifyDataSetChanged(); // obavesti RecyclerView da ponovo nacrta listu
+        this.tasks = newTasks != null ? newTasks : new ArrayList<>();
+        notifyDataSetChanged();
     }
 
-    @NonNull
-    @Override
+    @NonNull @Override
     public TaskViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_task, parent, false);
-        return new TaskViewHolder(view);
+        View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_task, parent, false);
+        return new TaskViewHolder(v);
     }
 
-    @Override
-    public void onBindViewHolder(@NonNull TaskViewHolder holder, int position) {
-        Task task = tasks.get(position);
-        holder.bind(task, listener);
+    @Override public void onBindViewHolder(@NonNull TaskViewHolder holder, int position) {
+        holder.bind(tasks.get(position), categoryMap, listener, dateFmt);
     }
-
-    @Override
-    public int getItemCount() {
-        return tasks.size();
-    }
+    @Override public int getItemCount() { return tasks.size(); }
 
     static class TaskViewHolder extends RecyclerView.ViewHolder {
         TextView tvTitle, tvCategory, tvStatus, tvXP;
 
-        public TaskViewHolder(@NonNull View itemView) {
+        TaskViewHolder(@NonNull View itemView) {
             super(itemView);
             tvTitle = itemView.findViewById(R.id.tvTitle);
             tvCategory = itemView.findViewById(R.id.tvCategory);
@@ -65,35 +55,30 @@ public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder
             tvXP = itemView.findViewById(R.id.tvXP);
         }
 
-        public void bind(Task task, OnTaskClickListener listener) {
+        void bind(Task task, Map<String,Category> catMap, OnTaskClickListener listener, SimpleDateFormat df) {
             tvTitle.setText(task.getTitle());
 
-            TaskRepository repo = new TaskRepository(itemView.getContext());
-            Category cat = repo.getCategoryById(task.getCategoryId());
+            Category cat = catMap.get(task.getCategoryIdHash());
             if (cat != null) {
                 tvCategory.setText("Kategorija: " + cat.getName());
                 try {
                     int color = android.graphics.Color.parseColor(cat.getColor());
-                    tvCategory.setTextColor(color); // oboji tekst
-                } catch (IllegalArgumentException e) {
-                    tvCategory.setTextColor(android.graphics.Color.BLACK);
-                }
+                    tvCategory.setTextColor(color);
+                } catch (Exception ignored) { tvCategory.setTextColor(android.graphics.Color.BLACK); }
             } else {
                 tvCategory.setText("Kategorija: -");
+                tvCategory.setTextColor(android.graphics.Color.BLACK);
             }
 
             tvStatus.setText("Status: " + task.getStatus());
             tvXP.setText("XP: " + task.getXpPoints());
 
             if (task.isRecurring()) {
-                tvStatus.append("\nPonavlja se svaka " + task.getRepeatInterval() + " "
-                        + task.getRepeatUnit() + " do "
-                        + new java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                tvStatus.append("\nPonavlja se svaka " + task.getRepeatInterval() + " " + task.getRepeatUnit()
+                        + " do " + new java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
                         .format(new java.util.Date(task.getEndDate())));
             } else {
-                tvStatus.append("\nRok: " +
-                        new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
-                                .format(new java.util.Date(task.getDueDateTime())));
+                tvStatus.append("\nRok: " + df.format(new java.util.Date(task.getDueDateTime())));
             }
 
             itemView.setOnClickListener(v -> listener.onTaskClick(task));
