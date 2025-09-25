@@ -87,17 +87,66 @@ public class ProfileFragment extends Fragment {
                         tvPP.setText("PP: " + player.getPp());
                         tvXP.setText("XP: " + player.getXp());
                         tvCoins.setText("Novcici: " + player.getCoins());
-                        tvMissions.setText("Zavrsene misije: 0"); // nije DOVRSENO !!!
 
                         int avatarRes = getResources().getIdentifier(
                                 player.getAvatar(), "drawable", requireContext().getPackageName());
-                        if (avatarRes != 0) {
-                            ivAvatar.setImageResource(avatarRes);
-                        }
+                        if (avatarRes != 0) ivAvatar.setImageResource(avatarRes);
                     }
                 });
+
+        loadCompletedMissionsCount();
     }
 
+    private void loadCompletedMissionsCount() {
+        if (user == null) return;
+
+        CollectionReference logsRef = db.collection("users")
+                .document(user.getUid())
+                .collection("completionLogs");
+
+        Query qWithXp = logsRef.whereGreaterThan("xpAwarded", 0);
+
+        try {
+            logsRef.count().get(AggregateSource.SERVER)
+                    .addOnSuccessListener((AggregateQuerySnapshot snapAll) -> {
+                        final long total = snapAll.getCount();
+
+                        qWithXp.count().get(AggregateSource.SERVER)
+                                .addOnSuccessListener((AggregateQuerySnapshot snapWithXp) -> {
+                                    long withXp = snapWithXp.getCount();
+                                    long withoutXp = Math.max(0, total - withXp);
+
+                                    tvMissions.setText("Završene misije: " + total + " (sa XP: " + withXp + " misija, bez XP: " + withoutXp + " misija)");
+                                })
+                                .addOnFailureListener(e -> fallbackCountLogs(logsRef));
+                    })
+                    .addOnFailureListener(e -> fallbackCountLogs(logsRef));
+
+        } catch (Throwable t) {
+            fallbackCountLogs(logsRef);
+        }
+    }
+
+    private void fallbackCountLogs(CollectionReference logsRef) {
+        logsRef.get()
+                .addOnSuccessListener(qs -> {
+                    int total = qs.size();
+                    int withXp = 0;
+                    for (com.google.firebase.firestore.DocumentSnapshot d : qs) {
+                        Long xpL = d.getLong("xpAwarded");
+                        int xp = xpL == null ? 0 : xpL.intValue();
+                        if (xp > 0) withXp++;
+                    }
+                    int withoutXp = Math.max(0, total - withXp);
+
+                    tvMissions.setText(
+                            "Završene misije: " + total + " (sa XP: " + withXp + " misija, bez XP: " + withoutXp + " misija)"
+                    );
+                })
+                .addOnFailureListener(e ->
+                        tvMissions.setText("Završene misije: -")
+                );
+    }
     private void logOut() {
         auth.signOut();
 

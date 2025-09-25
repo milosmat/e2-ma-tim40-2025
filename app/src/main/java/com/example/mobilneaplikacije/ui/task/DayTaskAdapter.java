@@ -1,85 +1,89 @@
 package com.example.mobilneaplikacije.ui.task;
 
-import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
-import com.example.mobilneaplikacije.data.repository.TaskRepository;
+import com.example.mobilneaplikacije.data.model.TaskOccurrence;
+import com.example.mobilneaplikacije.ui.dto.DayRowDTO;
 
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public class DayTaskAdapter extends RecyclerView.Adapter<DayTaskAdapter.DayTaskViewHolder> {
 
-    private List<Task> tasks;
-    private final TaskAdapter.OnTaskClickListener listener;
+    public interface OnDayClickListener {
+        void onDayClick(Task task, @Nullable String occurrenceId);
+    }
 
-    public DayTaskAdapter(List<Task> tasks, TaskAdapter.OnTaskClickListener listener) {
-        this.tasks = tasks;
+    private List<DayRowDTO> rows;
+    private final OnDayClickListener listener;
+    private final Map<String, Category> categoryMap;
+
+    public DayTaskAdapter(List<DayRowDTO> rows, Map<String,Category> categoryMap, OnDayClickListener listener) {
+        this.rows = rows != null ? rows : new ArrayList<>();
         this.listener = listener;
+        this.categoryMap = categoryMap != null ? categoryMap : new HashMap<>();
     }
 
-    @NonNull
-    @Override
+    @NonNull @Override
     public DayTaskViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
+        View v = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.item_day_task, parent, false);
-        return new DayTaskViewHolder(view);
+        return new DayTaskViewHolder(v);
     }
 
-    @Override
-    public void onBindViewHolder(@NonNull DayTaskViewHolder holder, int position) {
-        holder.bind(tasks.get(position), listener);
+    @Override public void onBindViewHolder(@NonNull DayTaskViewHolder h, int pos) {
+        h.bind(rows.get(pos), categoryMap, listener);
     }
 
-    @Override
-    public int getItemCount() {
-        return tasks.size();
-    }
+    @Override public int getItemCount() { return rows.size(); }
 
-    public void updateData(List<Task> newTasks) {
-        tasks = newTasks;
+    public void updateData(List<DayRowDTO> newRows) {
+        rows = newRows != null ? newRows : new ArrayList<>();
         notifyDataSetChanged();
     }
 
     static class DayTaskViewHolder extends RecyclerView.ViewHolder {
-        View viewColor;
         TextView tvTitle, tvTime;
         final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
         DayTaskViewHolder(@NonNull View itemView) {
             super(itemView);
-            viewColor = itemView.findViewById(R.id.viewColor);
-            tvTitle   = itemView.findViewById(R.id.tvTitle);
-            tvTime    = itemView.findViewById(R.id.tvTime);
+            tvTitle = itemView.findViewById(R.id.tvTitle);
+            tvTime  = itemView.findViewById(R.id.tvTime);
         }
 
-        void bind(Task task, TaskAdapter.OnTaskClickListener listener) {
+        void bind(DayRowDTO row,
+                  Map<String,Category> catMap,
+                  OnDayClickListener listener) {
+
+            Task task = row.task;
+            TaskOccurrence occ = row.occ;
+
             tvTitle.setText(task.getTitle());
 
-            // vreme: za ponavljajući prikazujemo startTime tog dana (TaskCalendarFragment već filtrira po danu)
-            long when = task.isRecurring() ? task.getStartDate() : task.getDueDateTime();
+            long when = (occ != null && occ.dueDateTime > 0)
+                    ? occ.dueDateTime
+                    : (task.isRecurring() ? task.getStartDate() : task.getDueDateTime());
             tvTime.setText(timeFmt.format(new Date(when)));
 
-            TaskRepository repo = new TaskRepository(itemView.getContext());
-            Category cat = repo.getCategoryById(task.getCategoryId());
+            Category cat = catMap.get(task.getCategoryIdHash());
             if (cat != null) {
-                try {
-                    int color = android.graphics.Color.parseColor(cat.getColor());
-                    tvTitle.setTextColor(color); // boja naslova = boja kategorije
-                } catch (IllegalArgumentException e) {
-                    tvTitle.setTextColor(android.graphics.Color.BLACK);
-                }
+                try { tvTitle.setTextColor(android.graphics.Color.parseColor(cat.getColor())); }
+                catch (Exception e) { tvTitle.setTextColor(android.graphics.Color.BLACK); }
+            } else {
+                tvTitle.setTextColor(android.graphics.Color.BLACK);
             }
-            itemView.setOnClickListener(v -> listener.onTaskClick(task));
+
+            itemView.setOnClickListener(v ->
+                    listener.onDayClick(task, occ == null ? null : occ.id));
         }
     }
 }

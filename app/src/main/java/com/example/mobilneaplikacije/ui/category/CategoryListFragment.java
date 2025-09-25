@@ -15,8 +15,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.repository.CategoryRepository;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CategoryListFragment extends Fragment {
@@ -24,6 +24,7 @@ public class CategoryListFragment extends Fragment {
     private RecyclerView recyclerCategories;
     private CategoryAdapter adapter;
     private CategoryRepository repo;
+    private final List<Category> inMemory = new ArrayList<>();
 
     public CategoryListFragment() {}
 
@@ -38,12 +39,12 @@ public class CategoryListFragment extends Fragment {
         recyclerCategories.setLayoutManager(new LinearLayoutManager(getContext()));
 
         repo = new CategoryRepository(requireContext());
-        List<Category> categories = repo.getAllCategories();
 
-        adapter = new CategoryAdapter(categories,
+        adapter = new CategoryAdapter(
+                inMemory,
                 category -> {
-                    // Klik na postojeću kategoriju → edit
-                    AddCategoryFragment fragment = AddCategoryFragment.newInstanceForEdit(category.getId());
+                    // Edit – sada koristimo idHash
+                    AddCategoryFragment fragment = AddCategoryFragment.newInstanceForEdit(category.getIdHash());
                     requireActivity().getSupportFragmentManager()
                             .beginTransaction()
                             .replace(R.id.fragment_container, fragment)
@@ -51,7 +52,7 @@ public class CategoryListFragment extends Fragment {
                             .commit();
                 },
                 () -> {
-                    // Klik na "Dodaj novu kategoriju"
+                    // Dodaj novu
                     AddCategoryFragment fragment = new AddCategoryFragment();
                     requireActivity().getSupportFragmentManager()
                             .beginTransaction()
@@ -62,12 +63,26 @@ public class CategoryListFragment extends Fragment {
 
         recyclerCategories.setAdapter(adapter);
 
+        loadCategories();
         return view;
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        adapter.updateData(repo.getAllCategories());
+        loadCategories();
+    }
+
+    private void loadCategories() {
+        repo.getAllCategories(new CategoryRepository.Callback<List<Category>>() {
+            @Override public void onSuccess(List<Category> data) {
+                inMemory.clear();
+                if (data != null) inMemory.addAll(data);
+                adapter.updateData(inMemory);
+            }
+            @Override public void onError(Exception e) {
+                Toast.makeText(getContext(), "Greška pri učitavanju: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
     }
 }

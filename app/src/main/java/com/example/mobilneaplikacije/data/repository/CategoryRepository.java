@@ -1,115 +1,134 @@
 package com.example.mobilneaplikacije.data.repository;
 
-import android.content.ContentValues;
 import android.content.Context;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.widget.Toast;
 
-import com.example.mobilneaplikacije.data.db.AppDatabase;
+import androidx.annotation.Nullable;
+
 import com.example.mobilneaplikacije.data.model.Category;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CategoryRepository {
-    private AppDatabase dbHelper;
-    private Context context;
+
+    public interface Callback<T> {
+        void onSuccess(@Nullable T data);
+        void onError(Exception e);
+    }
+
+    private final Context context;
+    private final FirebaseFirestore db;
+    private final String uid;
 
     public CategoryRepository(Context context) {
-        this.context = context;
-        dbHelper = AppDatabase.getInstance(context);
+        this.context = context.getApplicationContext();
+        this.db = FirebaseFirestore.getInstance();
+        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
+        if (u == null) throw new IllegalStateException("User not logged in");
+        this.uid = u.getUid();
     }
 
-    // ➕ Insert
-    public long insertCategory(Category category) {
-        if (isColorTaken(category.getColor(), -1)) {
-            Toast.makeText(context, "Boja je već zauzeta!", Toast.LENGTH_LONG).show();
-            return -1;
-        }
-
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put("name", category.getName());
-        values.put("color", category.getColor());
-        long id = db.insert("Category", null, values);
-        db.close();
-        return id;
+    private CollectionReference col() {
+        return db.collection("users").document(uid).collection("categories");
     }
 
-    // ✏️ Update
-    public void updateCategory(Category category) {
-        if (isColorTaken(category.getColor(), category.getId())) {
-            Toast.makeText(context, "Boja je već zauzeta!", Toast.LENGTH_LONG).show();
+    public void insertCategory(Category category, Callback<String> cb) {
+        isColorTaken(category.getColor(), null, new Callback<Boolean>() {
+            @Override public void onSuccess(Boolean taken) {
+                if (Boolean.TRUE.equals(taken)) {
+                    Toast.makeText(context, "Boja je već zauzeta!", Toast.LENGTH_LONG).show();
+                    cb.onError(new IllegalStateException("COLOR_TAKEN"));
+                    return;
+                }
+                Map<String, Object> map = new HashMap<>();
+                map.put("name", category.getName());
+                map.put("color", category.getColor());
+                map.put("createdAt", FieldValue.serverTimestamp());
+
+                col().add(map)
+                        .addOnSuccessListener(ref -> cb.onSuccess(ref.getId()))
+                        .addOnFailureListener(cb::onError);
+            }
+            @Override public void onError(Exception e) { cb.onError(e); }
+        });
+    }
+
+    public void updateCategory(Category category, Callback<Void> cb) {
+        String idHash = category.getIdHash();
+        if (idHash == null || idHash.isEmpty()) {
+            cb.onError(new IllegalArgumentException("Missing category idHash"));
             return;
         }
+        isColorTaken(category.getColor(), idHash, new Callback<Boolean>() {
+            @Override public void onSuccess(Boolean taken) {
+                if (Boolean.TRUE.equals(taken)) {
+                    Toast.makeText(context, "Boja je već zauzeta!", Toast.LENGTH_LONG).show();
+                    cb.onError(new IllegalStateException("COLOR_TAKEN"));
+                    return;
+                }
+                Map<String, Object> map = new HashMap<>();
+                map.put("name", category.getName());
+                map.put("color", category.getColor());
 
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put("name", category.getName());
-        values.put("color", category.getColor());
-
-        db.update("Category", values, "id=?", new String[]{String.valueOf(category.getId())});
-        db.close();
+                col().document(idHash)
+                        .set(map, SetOptions.merge())
+                        .addOnSuccessListener(v -> cb.onSuccess(null))
+                        .addOnFailureListener(cb::onError);
+            }
+            @Override public void onError(Exception e) { cb.onError(e); }
+        });
     }
 
-    // ❌ Delete
-    public void deleteCategory(long id) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        db.delete("Category", "id=?", new String[]{String.valueOf(id)});
-        db.close();
+    public void getAllCategories(Callback<List<Category>> cb) {
+        col().orderBy("name", Query.Direction.ASCENDING)
+                .get()
+                .addOnSuccessListener(snap -> {
+                    List<Category> out = new ArrayList<>();
+                    for (DocumentSnapshot d : snap.getDocuments()) {
+                        Category c = new Category();
+                        c.setIdHash(d.getId());
+                        c.setName(d.getString("name"));
+                        c.setColor(d.getString("color"));
+                        out.add(c);
+                    }
+                    cb.onSuccess(out);
+                })
+                .addOnFailureListener(cb::onError);
     }
 
-    // 📥 Get All
-    public List<Category> getAllCategories() {
-        List<Category> categories = new ArrayList<>();
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM Category", null);
-
-        if (cursor.moveToFirst()) {
-            do {
-                Category c = new Category();
-                c.setId(cursor.getLong(cursor.getColumnIndexOrThrow("id")));
-                c.setName(cursor.getString(cursor.getColumnIndexOrThrow("name")));
-                c.setColor(cursor.getString(cursor.getColumnIndexOrThrow("color")));
-                categories.add(c);
-            } while (cursor.moveToNext());
+    public void getCategoryById(String idHash, Callback<Category> cb) {
+        if (idHash == null || idHash.isEmpty()) {
+            cb.onError(new IllegalArgumentException("Missing category idHash"));
+            return;
         }
-        cursor.close();
-        db.close();
-        return categories;
+        col().document(idHash).get()
+                .addOnSuccessListener(d -> {
+                    if (!d.exists()) { cb.onSuccess(null); return; }
+                    Category c = new Category();
+                    c.setIdHash(d.getId());
+                    c.setName(d.getString("name"));
+                    c.setColor(d.getString("color"));
+                    cb.onSuccess(c);
+                })
+                .addOnFailureListener(cb::onError);
     }
 
-    // 📥 Get by ID
-    public Category getCategoryById(long id) {
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM Category WHERE id=?",
-                new String[]{String.valueOf(id)});
-        Category c = null;
-        if (cursor.moveToFirst()) {
-            c = new Category();
-            c.setId(cursor.getLong(cursor.getColumnIndexOrThrow("id")));
-            c.setName(cursor.getString(cursor.getColumnIndexOrThrow("name")));
-            c.setColor(cursor.getString(cursor.getColumnIndexOrThrow("color")));
-        }
-        cursor.close();
-        db.close();
-        return c;
-    }
-
-    // ✅ Provera da li je boja već zauzeta
-    private boolean isColorTaken(String color, long ignoreId) {
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor cursor = db.rawQuery(
-                "SELECT COUNT(*) FROM Category WHERE color=? AND id<>?",
-                new String[]{color, String.valueOf(ignoreId)}
-        );
-        boolean taken = false;
-        if (cursor.moveToFirst()) {
-            taken = cursor.getInt(0) > 0;
-        }
-        cursor.close();
-        db.close();
-        return taken;
+    private void isColorTaken(String color, @Nullable String ignoreIdHash, Callback<Boolean> cb) {
+        col().whereEqualTo("color", color).get()
+                .addOnSuccessListener(snap -> {
+                    boolean taken = false;
+                    for (DocumentSnapshot d : snap.getDocuments()) {
+                        if (ignoreIdHash != null && ignoreIdHash.equals(d.getId())) continue;
+                        taken = true; break;
+                    }
+                    cb.onSuccess(taken);
+                })
+                .addOnFailureListener(cb::onError);
     }
 }

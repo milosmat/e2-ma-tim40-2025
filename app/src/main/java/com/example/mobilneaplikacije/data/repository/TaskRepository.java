@@ -1,252 +1,524 @@
 package com.example.mobilneaplikacije.data.repository;
 
-import android.content.ContentValues;
-import android.content.Context;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+import androidx.annotation.Nullable;
 
-import com.example.mobilneaplikacije.data.db.AppDatabase;
-import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
+import com.example.mobilneaplikacije.data.model.TaskOccurrence;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.*;
 
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
+import java.util.*;
 
 public class TaskRepository {
-    private AppDatabase dbHelper;
 
-    public TaskRepository(Context context) {
-        dbHelper = AppDatabase.getInstance(context);
+    public interface Callback<T> {
+        void onSuccess(@Nullable T data);
+        void onError(Exception e);
     }
 
-    // Insert
-    public long insertTask(Task task) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put("title", task.getTitle());
-        values.put("description", task.getDescription());
-        values.put("categoryId", task.getCategoryId());
-        values.put("isRecurring", task.isRecurring() ? 1 : 0);
-        values.put("repeatInterval", task.getRepeatInterval());
-        values.put("repeatUnit", task.getRepeatUnit());
-        values.put("startDate", task.getStartDate());
-        values.put("endDate", task.getEndDate());
-        values.put("difficulty", task.getDifficulty());
-        values.put("importance", task.getImportance());
-        values.put("xpPoints", task.getXpPoints());
-        values.put("status", task.getStatus());
-        values.put("dueDateTime", task.getDueDateTime());
-        long id = db.insert("Task", null, values);
-        db.close();
-        return id;
+    private final FirebaseFirestore db;
+    private final String uid;
+
+    public TaskRepository(android.content.Context context) {
+        this.db = FirebaseFirestore.getInstance();
+        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
+        if (u == null) throw new IllegalStateException("User not logged in");
+        this.uid = u.getUid();
     }
 
-    // Get all + auto označavanje "MISSED"
-    public List<Task> getAllTasks() {
-        List<Task> tasks = new ArrayList<>();
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM Task", null);
-
-        long now = System.currentTimeMillis();
-        long threeDaysAgo = now - 3L * 24 * 60 * 60 * 1000;
-
-        if (cursor.moveToFirst()) {
-            do {
-                Task task = new Task();
-                task.setId(cursor.getLong(cursor.getColumnIndexOrThrow("id")));
-                task.setTitle(cursor.getString(cursor.getColumnIndexOrThrow("title")));
-                task.setDescription(cursor.getString(cursor.getColumnIndexOrThrow("description")));
-                task.setCategoryId(cursor.getLong(cursor.getColumnIndexOrThrow("categoryId")));
-                task.setRecurring(cursor.getInt(cursor.getColumnIndexOrThrow("isRecurring")) == 1);
-                task.setRepeatInterval(cursor.getInt(cursor.getColumnIndexOrThrow("repeatInterval")));
-                task.setRepeatUnit(cursor.getString(cursor.getColumnIndexOrThrow("repeatUnit")));
-                task.setStartDate(cursor.getLong(cursor.getColumnIndexOrThrow("startDate")));
-                task.setEndDate(cursor.getLong(cursor.getColumnIndexOrThrow("endDate")));
-                task.setDifficulty(cursor.getString(cursor.getColumnIndexOrThrow("difficulty")));
-                task.setImportance(cursor.getString(cursor.getColumnIndexOrThrow("importance")));
-                task.setXpPoints(cursor.getInt(cursor.getColumnIndexOrThrow("xpPoints")));
-                task.setStatus(cursor.getString(cursor.getColumnIndexOrThrow("status")));
-                task.setDueDateTime(cursor.getLong(cursor.getColumnIndexOrThrow("dueDateTime")));
-
-                // 🚨 Automatski označi kao MISSED ako je ACTIVE i prošlo više od 3 dana
-                if ("ACTIVE".equals(task.getStatus()) && task.getDueDateTime() < threeDaysAgo) {
-                    task.setStatus("MISSED");
-                    updateTaskStatus(task.getId(), "MISSED");
-                }
-
-                tasks.add(task);
-            } while (cursor.moveToNext());
-        }
-        cursor.close();
-        db.close();
-        return tasks;
+    private CollectionReference tasksCol() {
+        return db.collection("users").document(uid).collection("tasks");
+    }
+    private CollectionReference occCol(String taskId) {
+        return tasksCol().document(taskId).collection("occurrences");
+    }
+    private CollectionReference logsCol() {
+        return db.collection("users").document(uid).collection("completionLogs");
+    }
+    private DocumentReference userDoc() {
+        return db.collection("users").document(uid);
     }
 
-    public void updateTask(Task task) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put("title", task.getTitle());
-        values.put("description", task.getDescription());
-        values.put("categoryId", task.getCategoryId());
-        values.put("isRecurring", task.isRecurring() ? 1 : 0);
-        values.put("repeatInterval", task.getRepeatInterval());
-        values.put("repeatUnit", task.getRepeatUnit());
-        values.put("startDate", task.getStartDate());
-        values.put("endDate", task.getEndDate());
-        values.put("difficulty", task.getDifficulty());
-        values.put("importance", task.getImportance());
-        values.put("xpPoints", task.getXpPoints());
-        values.put("status", task.getStatus());
-        values.put("dueDateTime", task.getDueDateTime());
-
-        db.update("Task", values, "id=?", new String[]{String.valueOf(task.getId())});
-        db.close();
+    private DocumentReference dayQuotaRef(long now) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(now);
+        int y = c.get(java.util.Calendar.YEAR);
+        int m = c.get(java.util.Calendar.MONTH) + 1;
+        int d = c.get(java.util.Calendar.DAY_OF_MONTH);
+        String key = String.format(java.util.Locale.US, "%04d%02d%02d", y, m, d);
+        return db.collection("users").document(uid)
+                .collection("quota").document("day_" + key);
     }
 
-    public void updateTaskStatus(long id, String status) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put("status", status);
-        db.update("Task", values, "id=?", new String[]{String.valueOf(id)});
-        db.close();
+    private DocumentReference weekQuotaRef(long now) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(now);
+        int y = c.get(java.util.Calendar.YEAR);
+        c.setFirstDayOfWeek(java.util.Calendar.MONDAY);
+        int w = c.get(java.util.Calendar.WEEK_OF_YEAR);
+        String key = String.format(java.util.Locale.US, "%04d%02d", y, w);
+        return db.collection("users").document(uid)
+                .collection("quota").document("week_" + key);
     }
 
-    public void deleteTask(long id) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        db.delete("Task", "id=?", new String[]{String.valueOf(id)});
-        db.close();
+    private DocumentReference monthQuotaRef(long now) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(now);
+        int y = c.get(java.util.Calendar.YEAR);
+        int m = c.get(java.util.Calendar.MONTH) + 1;
+        String key = String.format(java.util.Locale.US, "%04d%02d", y, m);
+        return db.collection("users").document(uid)
+                .collection("quota").document("month_" + key);
     }
 
-    public Task getTaskById(long id) {
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor c = db.rawQuery("SELECT * FROM Task WHERE id=?", new String[]{String.valueOf(id)});
-        Task t = null;
-        if (c.moveToFirst()) {
-            t = new Task();
-            t.setId(c.getLong(c.getColumnIndexOrThrow("id")));
-            t.setTitle(c.getString(c.getColumnIndexOrThrow("title")));
-            t.setDescription(c.getString(c.getColumnIndexOrThrow("description")));
-            t.setCategoryId(c.getLong(c.getColumnIndexOrThrow("categoryId")));
-            t.setRecurring(c.getInt(c.getColumnIndexOrThrow("isRecurring")) == 1);
-            t.setRepeatInterval(c.getInt(c.getColumnIndexOrThrow("repeatInterval")));
-            t.setRepeatUnit(c.getString(c.getColumnIndexOrThrow("repeatUnit")));
-            t.setStartDate(c.getLong(c.getColumnIndexOrThrow("startDate")));
-            t.setEndDate(c.getLong(c.getColumnIndexOrThrow("endDate")));
-            t.setDifficulty(c.getString(c.getColumnIndexOrThrow("difficulty")));
-            t.setImportance(c.getString(c.getColumnIndexOrThrow("importance")));
-            t.setXpPoints(c.getInt(c.getColumnIndexOrThrow("xpPoints")));
-            t.setStatus(c.getString(c.getColumnIndexOrThrow("status")));
-            t.setDueDateTime(c.getLong(c.getColumnIndexOrThrow("dueDateTime")));
+    private static int safeInt(Long v) { return v == null ? 0 : v.intValue(); }
+    public void insertTask(Task t, Callback<String> cb) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("title", t.getTitle());
+        map.put("description", t.getDescription());
+        map.put("categoryId", t.getCategoryIdHash());
+        map.put("difficulty", t.getDifficulty());
+        map.put("importance", t.getImportance());
+        map.put("xpPoints", t.getXpPoints());
+        map.put("status", "ACTIVE");
+        map.put("isRecurring", t.isRecurring());
+        map.put("repeatInterval", t.getRepeatInterval());
+        map.put("repeatUnit", t.getRepeatUnit());
+        map.put("startDate", t.getStartDate());
+        map.put("endDate", t.getEndDate());
+        map.put("dueDateTime", t.getDueDateTime());
+        map.put("createdAt", FieldValue.serverTimestamp());
+        map.put("updatedAt", FieldValue.serverTimestamp());
 
-            // 🚨 Provera i za pojedinačan upit
-            long threeDaysAgo = System.currentTimeMillis() - 3L * 24 * 60 * 60 * 1000;
-            if ("ACTIVE".equals(t.getStatus()) && t.getDueDateTime() < threeDaysAgo) {
-                t.setStatus("MISSED");
-                updateTaskStatus(t.getId(), "MISSED");
+        tasksCol().add(map)
+                .addOnSuccessListener(ref -> {
+                    if (t.isRecurring()) {
+                        generateOccurrences(ref.getId(), t, 90, new Callback<Void>() {
+                            @Override public void onSuccess(Void v) { cb.onSuccess(ref.getId()); }
+                            @Override public void onError(Exception e) { cb.onError(e); }
+                        });
+                    } else {
+                        cb.onSuccess(ref.getId());
+                    }
+                })
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void getAllTasks(Callback<List<Task>> cb) {
+        tasksCol().get()
+                .addOnSuccessListener(snap -> {
+                    List<Task> out = new ArrayList<>();
+                    for (DocumentSnapshot d : snap.getDocuments()) out.add(fromDoc(d));
+
+                    autoMarkMissedSingles(out);
+                    cb.onSuccess(out);
+                })
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void getTaskById(String idHash, Callback<Task> cb) {
+        tasksCol().document(idHash).get()
+                .addOnSuccessListener(d -> {
+                    if (!d.exists()) { cb.onSuccess(null); return; }
+                    Task t = fromDoc(d);
+                    autoMarkMissedSingle(t, new Callback<Void>() {
+                        @Override public void onSuccess(Void v) { cb.onSuccess(t); }
+                        @Override public void onError(Exception e) { cb.onSuccess(t); }
+                    });
+                })
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void updateTask(String taskId, Task updates, Callback<Void> cb) {
+        tasksCol().document(taskId).get().addOnSuccessListener(d -> {
+            if (!d.exists()) { cb.onError(new IllegalStateException("Task not found")); return; }
+            Task cur = fromDoc(d);
+
+            if (!canEditMaster(cur)) {
+                cb.onError(new IllegalStateException("Task locked for editing"));
+                return;
             }
-        }
-        c.close();
-        db.close();
+
+            Map<String, Object> m = new HashMap<>();
+            m.put("title", updates.getTitle());
+            m.put("description", updates.getDescription());
+            m.put("categoryId", updates.getCategoryIdHash());
+            m.put("difficulty", updates.getDifficulty());
+            m.put("importance", updates.getImportance());
+            m.put("xpPoints", updates.getXpPoints());
+            m.put("dueDateTime", updates.getDueDateTime());
+            m.put("repeatInterval", updates.getRepeatInterval());
+            m.put("repeatUnit", updates.getRepeatUnit());
+            m.put("startDate", updates.getStartDate());
+            m.put("endDate", updates.getEndDate());
+            m.put("updatedAt", FieldValue.serverTimestamp());
+
+            tasksCol().document(taskId).set(m, SetOptions.merge())
+                    .addOnSuccessListener(v -> {
+                        if (cur.isRecurring()) {
+                            long now = System.currentTimeMillis();
+                            deleteOccurrencesFrom(taskId, now, new Callback<Void>() {
+                                @Override public void onSuccess(Void unused) {
+                                    generateOccurrences(taskId, updates, 90, cb);
+                                }
+                                @Override public void onError(Exception e) { cb.onError(e); }
+                            });
+                        } else {
+                            cb.onSuccess(null);
+                        }
+                    })
+                    .addOnFailureListener(cb::onError);
+        }).addOnFailureListener(cb::onError);
+    }
+
+    public void updateTaskStatus(String taskId, String status, Callback<Void> cb) {
+        tasksCol().document(taskId)
+                .update("status", status, "updatedAt", FieldValue.serverTimestamp())
+                .addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void deleteTask(String taskId, Callback<Void> cb) {
+        tasksCol().document(taskId).get().addOnSuccessListener(d -> {
+            if (!d.exists()) { cb.onSuccess(null); return; }
+            Task t = fromDoc(d);
+            if (isFinishedOrMissed(t)) {
+                cb.onError(new IllegalStateException("Cannot delete finished/missed"));
+                return;
+            }
+
+            occCol(taskId).get().addOnSuccessListener(snap -> {
+                WriteBatch b = db.batch();
+                for (DocumentSnapshot x : snap.getDocuments()) {
+                    b.delete(x.getReference());
+                }
+                b.delete(tasksCol().document(taskId));
+                b.commit().addOnSuccessListener(v -> cb.onSuccess(null))
+                        .addOnFailureListener(cb::onError);
+            }).addOnFailureListener(cb::onError);
+        }).addOnFailureListener(cb::onError);
+    }
+
+    public void getOccurrencesForRange(String taskId, long start, long end, Callback<List<TaskOccurrence>> cb) {
+        occCol(taskId)
+                .whereGreaterThanOrEqualTo("dueDateTime", start)
+                .whereLessThanOrEqualTo("dueDateTime", end)
+                .get()
+                .addOnSuccessListener(snap -> {
+                    List<TaskOccurrence> list = new ArrayList<>();
+                    for (DocumentSnapshot d : snap.getDocuments()) {
+                        TaskOccurrence o = new TaskOccurrence();
+                        o.id = d.getId();
+                        Long due = d.getLong("dueDateTime");
+                        o.dueDateTime = due == null ? 0 : due;
+                        o.status = d.getString("status");
+                        Long xps = d.getLong("xpPointsSnapshot");
+                        o.xpPointsSnapshot = xps == null ? 0 : xps.intValue();
+                        list.add(o);
+                    }
+                    autoMarkMissedOccurrences(taskId, list, new Callback<Void>() {
+                        @Override public void onSuccess(Void v) { cb.onSuccess(list); }
+                        @Override public void onError(Exception e) { cb.onSuccess(list); }
+                    });
+                })
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void markOccurrenceDone(String taskId, String occId, int baseXp, String difficulty, String importance,
+                                   Callback<Integer> cb) {
+        final long now = System.currentTimeMillis();
+        final long threeDaysAgo = now - 3L*24*60*60*1000;
+
+        final String diffN = difficulty;
+        final String impN  = importance;
+
+        db.runTransaction(tr -> {
+                    DocumentReference occRef = occCol(taskId).document(occId);
+                    DocumentSnapshot occ = tr.get(occRef);
+                    if (!occ.exists()) throw new IllegalStateException("OCC_NOT_FOUND");
+
+                    String status = occ.getString("status");
+                    Long due = occ.getLong("dueDateTime");
+                    if (!"ACTIVE".equals(status)) throw new IllegalStateException("NOT_ACTIVE");
+                    if (due == null) throw new IllegalStateException("NO_DUE");
+                    if (due < threeDaysAgo) throw new IllegalStateException("TOO_OLD");
+
+                    DocumentReference dRef = dayQuotaRef(now);
+                    DocumentReference wRef = weekQuotaRef(now);
+                    DocumentReference mRef = monthQuotaRef(now);
+
+                    DocumentSnapshot dSnap = tr.get(dRef);
+                    DocumentSnapshot wSnap = tr.get(wRef);
+                    DocumentSnapshot mSnap = tr.get(mRef);
+
+                    int veryEasy = safeInt(dSnap.getLong("veryEasy"));
+                    int easy = safeInt(dSnap.getLong("easy"));
+                    int hard = safeInt(dSnap.getLong("hard"));
+                    int normal = safeInt(dSnap.getLong("normal"));
+                    int important = safeInt(dSnap.getLong("important"));
+                    int extImportant = safeInt(dSnap.getLong("extImportant"));
+                    int extHard = safeInt(wSnap.getLong("extHard"));
+                    int special = safeInt(mSnap.getLong("special"));
+
+                    boolean allowed = true;
+
+                    if ("VEOMA_LAK".equals(diffN) && veryEasy >= 5) allowed = false;
+                    if ("LAK".equals(diffN) && easy >= 5) allowed = false;
+                    if ("TEZAK".equals(diffN) && hard >= 2) allowed = false;
+                    if ("EKSTREMNO_TEZAK".equals(diffN) && extHard >= 1) allowed = false;
+
+                    if ("NORMALAN".equals(impN) && normal >= 5) allowed = false;
+                    if ("VAZAN".equals(impN) && important >= 5) allowed = false;
+                    if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2)allowed = false;
+                    if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
+
+                    int award = allowed ? baseXp : 0;
+
+                    tr.update(occRef, "status", "DONE", "xpAwarded", award);
+
+                    Map<String, Object> log = new HashMap<>();
+                    log.put("taskId", taskId);
+                    log.put("occurrenceId", occId);
+                    log.put("completedAt", now);
+                    log.put("difficulty", difficulty);
+                    log.put("importance", importance);
+                    log.put("xpAwarded", award);
+                    tr.set(logsCol().document(), log);
+
+                    Map<String, Object> dayUpd = new HashMap<>();
+                    if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
+                    if ("LAK".equals(diffN))       dayUpd.put("easy", easy + 1);
+                    if ("TEZAK".equals(diffN))     dayUpd.put("hard", hard + 1);
+                    if ("NORMALAN".equals(impN))   dayUpd.put("normal", normal + 1);
+                    if ("VAZAN".equals(impN))      dayUpd.put("important", important + 1);
+                    if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
+                    if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
+
+                    if ("EKSTREMNO_TEZAK".equals(diffN)) {
+                        Map<String, Object> wUpd = new HashMap<>();
+                        wUpd.put("extHard", extHard + 1);
+                        tr.set(wRef, wUpd, SetOptions.merge());
+                    }
+                    if ("SPECIJALAN".equals(impN)) {
+                        Map<String, Object> mUpd = new HashMap<>();
+                        mUpd.put("special", special + 1);
+                        tr.set(mRef, mUpd, SetOptions.merge());
+                    }
+
+                    if (award > 0) tr.update(userDoc(), "xp", FieldValue.increment(award));
+
+                    return award;
+                }).addOnSuccessListener(cb::onSuccess)
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void markSingleDone(String taskId, int baseXp, String difficulty, String importance,
+                               Callback<Integer> cb) {
+        final long now = System.currentTimeMillis();
+        final long threeDaysAgo = now - 3L*24*60*60*1000;
+
+        final String diffN = difficulty;
+        final String impN  = importance;
+
+        db.runTransaction(tr -> {
+                    DocumentReference tRef = tasksCol().document(taskId);
+                    DocumentSnapshot d = tr.get(tRef);
+                    if (!d.exists()) throw new IllegalStateException("TASK_NOT_FOUND");
+
+                    String status = d.getString("status");
+                    Long due = d.getLong("dueDateTime");
+                    Boolean recurring = d.getBoolean("isRecurring");
+                    if (Boolean.TRUE.equals(recurring)) throw new IllegalStateException("USE_OCCURRENCE");
+                    if (!"ACTIVE".equals(status)) throw new IllegalStateException("NOT_ACTIVE");
+                    if (due == null) throw new IllegalStateException("NO_DUE");
+                    if (due < threeDaysAgo) throw new IllegalStateException("TOO_OLD");
+
+                    DocumentReference dRef = dayQuotaRef(now);
+                    DocumentReference wRef = weekQuotaRef(now);
+                    DocumentReference mRef = monthQuotaRef(now);
+
+                    DocumentSnapshot dSnap = tr.get(dRef);
+                    DocumentSnapshot wSnap = tr.get(wRef);
+                    DocumentSnapshot mSnap = tr.get(mRef);
+
+                    int veryEasy = safeInt(dSnap.getLong("veryEasy"));
+                    int easy = safeInt(dSnap.getLong("easy"));
+                    int hard = safeInt(dSnap.getLong("hard"));
+                    int normal = safeInt(dSnap.getLong("normal"));
+                    int important = safeInt(dSnap.getLong("important"));
+                    int extImportant = safeInt(dSnap.getLong("extImportant"));
+                    int extHard = safeInt(wSnap.getLong("extHard"));
+                    int special = safeInt(mSnap.getLong("special"));
+
+                    boolean allowed = true;
+                    if ("VEOMA_LAK".equals(diffN) && veryEasy >= 5) allowed = false;
+                    if ("LAK".equals(diffN) && easy >= 5) allowed = false;
+                    if ("TEZAK".equals(diffN) && hard >= 2) allowed = false;
+                    if ("EKSTREMNO_TEZAK".equals(diffN) && extHard >= 1) allowed = false;
+
+                    if ("NORMALAN".equals(impN) && normal >= 5) allowed = false;
+                    if ("VAZAN".equals(impN) && important >= 5) allowed = false;
+                    if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2) allowed = false;
+                    if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
+
+                    int award = allowed ? baseXp : 0;
+
+                    tr.update(tRef, "status", "DONE", "updatedAt", FieldValue.serverTimestamp());
+
+                    Map<String, Object> log = new HashMap<>();
+                    log.put("taskId", taskId);
+                    log.put("occurrenceId", null);
+                    log.put("completedAt", now);
+                    log.put("difficulty", difficulty);
+                    log.put("importance", importance);
+                    log.put("xpAwarded", award);
+                    tr.set(logsCol().document(), log);
+
+                    Map<String, Object> dayUpd = new HashMap<>();
+                    if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
+                    if ("LAK".equals(diffN)) dayUpd.put("easy", easy + 1);
+                    if ("TEZAK".equals(diffN)) dayUpd.put("hard", hard + 1);
+                    if ("NORMALAN".equals(impN)) dayUpd.put("normal", normal + 1);
+                    if ("VAZAN".equals(impN)) dayUpd.put("important", important + 1);
+                    if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
+                    if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
+
+                    if ("EKSTREMNO_TEZAK".equals(diffN)) {
+                        Map<String, Object> wUpd = new HashMap<>();
+                        wUpd.put("extHard", extHard + 1);
+                        tr.set(wRef, wUpd, SetOptions.merge());
+                    }
+                    if ("SPECIJALAN".equals(impN)) {
+                        Map<String, Object> mUpd = new HashMap<>();
+                        mUpd.put("special", special + 1);
+                        tr.set(mRef, mUpd, SetOptions.merge());
+                    }
+
+                    if (award > 0) tr.update(userDoc(), "xp", FieldValue.increment(award));
+
+                    return award;
+                }).addOnSuccessListener(cb::onSuccess)
+                .addOnFailureListener(cb::onError);
+    }
+    public void cancelOccurrence(String taskId, String occId, Callback<Void> cb) {
+        occCol(taskId).document(occId)
+                .update("status", "CANCELLED")
+                .addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void pauseRecurringMaster(String taskId, Callback<Void> cb) {
+        tasksCol().document(taskId)
+                .update("status", "PAUSED", "updatedAt", FieldValue.serverTimestamp())
+                .addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void activateRecurringMaster(String taskId, Callback<Void> cb) {
+        tasksCol().document(taskId)
+                .update("status", "ACTIVE", "updatedAt", FieldValue.serverTimestamp())
+                .addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
+    }
+
+    private Task fromDoc(DocumentSnapshot d) {
+        Task t = new Task();
+        t.setIdHash(d.getId());
+        t.setTitle(d.getString("title"));
+        t.setDescription(d.getString("description"));
+        t.setCategoryIdHash(d.getString("categoryId"));
+        t.setDifficulty(d.getString("difficulty"));
+        t.setImportance(d.getString("importance"));
+        Long xp = d.getLong("xpPoints"); t.setXpPoints(xp == null ? 0 : xp.intValue());
+        t.setStatus(d.getString("status"));
+        Boolean rec = d.getBoolean("isRecurring"); t.setRecurring(Boolean.TRUE.equals(rec));
+        Long ri = d.getLong("repeatInterval"); t.setRepeatInterval(ri == null ? 0 : ri.intValue());
+        t.setRepeatUnit(d.getString("repeatUnit"));
+        Long sd = d.getLong("startDate"); t.setStartDate(sd == null ? 0 : sd);
+        Long ed = d.getLong("endDate");   t.setEndDate(ed == null ? 0 : ed);
+        Long due = d.getLong("dueDateTime"); t.setDueDateTime(due == null ? 0 : due);
         return t;
     }
 
-    public void logCompletion(long taskId, long completedAt, String difficulty, String importance, int xpAwarded) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues v = new ContentValues();
-        v.put("taskId", taskId);
-        v.put("completedAt", completedAt);
-        v.put("difficulty", difficulty);
-        v.put("importance", importance);
-        v.put("xpAwarded", xpAwarded);
-        db.insert("CompletionLog", null, v);
-        db.close();
+    private boolean canEditMaster(Task t) {
+        if ("DONE".equals(t.getStatus()) || "MISSED".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus()))
+            return false;
+
+        return t.isRecurring() || t.getDueDateTime() >= System.currentTimeMillis();
     }
 
-    private int countCompletionsBetween(String difficulty, String importance, long startMillis, long endMillis) {
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor c = db.rawQuery(
-                "SELECT COUNT(*) FROM CompletionLog WHERE difficulty=? AND importance=? AND completedAt BETWEEN ? AND ?",
-                new String[]{difficulty, importance, String.valueOf(startMillis), String.valueOf(endMillis)}
-        );
-        int count = 0;
-        if (c.moveToFirst()) count = c.getInt(0);
-        c.close();
-        db.close();
-        return count;
+    private boolean isFinishedOrMissed(Task t) {
+        return "DONE".equals(t.getStatus()) || "MISSED".equals(t.getStatus());
     }
 
-    public int countToday(String difficulty, String importance) {
-        Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.HOUR_OF_DAY, 0);
-        cal.set(Calendar.MINUTE, 0);
-        cal.set(Calendar.SECOND, 0);
-        cal.set(Calendar.MILLISECOND, 0);
-        long start = cal.getTimeInMillis();
-        long end = start + 24L * 60 * 60 * 1000 - 1;
-        return countCompletionsBetween(difficulty, importance, start, end);
-    }
+    private void generateOccurrences(String taskId, Task t, int upToDays, Callback<Void> cb) {
+        if (!t.isRecurring()) { cb.onSuccess(null); return; }
+        long now = System.currentTimeMillis();
+        long end = t.getEndDate() == 0 ? now + upToDays * 24L*60*60*1000
+                : Math.min(t.getEndDate(), now + upToDays * 24L*60*60*1000);
+        if (t.getStartDate() == 0 || end < t.getStartDate()) { cb.onSuccess(null); return; }
 
-    public int countThisWeek(String difficulty, String importance) {
-        Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.DAY_OF_WEEK, cal.getFirstDayOfWeek());
-        cal.set(Calendar.HOUR_OF_DAY, 0);
-        cal.set(Calendar.MINUTE, 0);
-        cal.set(Calendar.SECOND, 0);
-        cal.set(Calendar.MILLISECOND, 0);
-        long start = cal.getTimeInMillis();
-        long end = start + 7L * 24 * 60 * 60 * 1000 - 1;
-        return countCompletionsBetween(difficulty, importance, start, end);
-    }
-
-    public int countThisMonth(String difficulty, String importance) {
-        Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.DAY_OF_MONTH, 1);
-        cal.set(Calendar.HOUR_OF_DAY, 0);
-        cal.set(Calendar.MINUTE, 0);
-        cal.set(Calendar.SECOND, 0);
-        cal.set(Calendar.MILLISECOND, 0);
-        long start = cal.getTimeInMillis();
-        cal.add(Calendar.MONTH, 1);
-        cal.add(Calendar.MILLISECOND, -1);
-        long end = cal.getTimeInMillis();
-        return countCompletionsBetween(difficulty, importance, start, end);
-    }
-
-    public Category getCategoryById(long id) {
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor c = db.rawQuery("SELECT * FROM Category WHERE id=?", new String[]{String.valueOf(id)});
-        Category cat = null;
-        if (c.moveToFirst()) {
-            cat = new Category();
-            cat.setId(c.getLong(c.getColumnIndexOrThrow("id")));
-            cat.setName(c.getString(c.getColumnIndexOrThrow("name")));
-            cat.setColor(c.getString(c.getColumnIndexOrThrow("color")));
+        WriteBatch b = db.batch();
+        long cur = t.getStartDate();
+        while (cur <= end) {
+            DocumentReference r = occCol(taskId).document();
+            Map<String, Object> o = new HashMap<>();
+            o.put("dueDateTime", cur);
+            o.put("status", "ACTIVE");
+            o.put("xpPointsSnapshot", t.getXpPoints());
+            o.put("createdAt", FieldValue.serverTimestamp());
+            b.set(r, o);
+            cur = addUnit(cur, t.getRepeatUnit(), t.getRepeatInterval());
         }
-        c.close();
-        db.close();
-        return cat;
+        b.commit().addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
     }
 
-    public double calculateSuccessRate() {
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-
-        // Broj završenih (DONE)
-        Cursor doneCursor = db.rawQuery("SELECT COUNT(*) FROM Task WHERE status='DONE'", null);
-        int done = 0;
-        if (doneCursor.moveToFirst()) done = doneCursor.getInt(0);
-        doneCursor.close();
-
-        // Broj ukupnih zadataka koji se računaju (ACTIVE + DONE + MISSED)
-        Cursor totalCursor = db.rawQuery("SELECT COUNT(*) FROM Task WHERE status!='PAUSED' AND status!='CANCELLED'", null);
-        int total = 0;
-        if (totalCursor.moveToFirst()) total = totalCursor.getInt(0);
-        totalCursor.close();
-
-        db.close();
-
-        if (total == 0) return 0.0;
-        return (done * 100.0) / total;
+    private void deleteOccurrencesFrom(String taskId, long fromMillis, Callback<Void> cb) {
+        occCol(taskId).whereGreaterThanOrEqualTo("dueDateTime", fromMillis).get()
+                .addOnSuccessListener(snap -> {
+                    WriteBatch b = db.batch();
+                    for (DocumentSnapshot d : snap.getDocuments()) b.delete(d.getReference());
+                    b.commit().addOnSuccessListener(v -> cb.onSuccess(null))
+                            .addOnFailureListener(cb::onError);
+                })
+                .addOnFailureListener(cb::onError);
     }
 
+    private long addUnit(long base, String unit, int step) {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(base);
+        if ("WEEK".equals(unit)) c.add(Calendar.WEEK_OF_YEAR, step);
+        else c.add(Calendar.DAY_OF_YEAR, step);
+        return c.getTimeInMillis();
+    }
+
+    private void autoMarkMissedSingles(List<Task> list) {
+        for (Task t : list) autoMarkMissedSingle(t, null);
+    }
+    private void autoMarkMissedSingle(Task t, @Nullable Callback<Void> cb) {
+        if (t == null || t.isRecurring()) { if (cb!=null) cb.onSuccess(null); return; }
+        long threeDaysAgo = System.currentTimeMillis() - 3L*24*60*60*1000;
+        if ("ACTIVE".equals(t.getStatus()) && t.getDueDateTime() < threeDaysAgo) {
+            tasksCol().document(t.getIdHash())
+                    .update("status","MISSED","updatedAt",FieldValue.serverTimestamp())
+                    .addOnSuccessListener(v->{ if(cb!=null) cb.onSuccess(null); })
+                    .addOnFailureListener(e->{ if(cb!=null) cb.onError(e); });
+        } else if (cb!=null) cb.onSuccess(null);
+    }
+    private void autoMarkMissedOccurrences(String taskId, List<TaskOccurrence> occs, Callback<Void> cb) {
+        long threeDaysAgo = System.currentTimeMillis() - 3L*24*60*60*1000;
+        WriteBatch b = db.batch();
+        boolean any = false;
+        for (TaskOccurrence o : occs) {
+            if ("ACTIVE".equals(o.status) && o.dueDateTime < threeDaysAgo) {
+                b.update(occCol(taskId).document(o.id), "status", "MISSED");
+                any = true;
+            }
+        }
+        if (!any) { cb.onSuccess(null); return; }
+        b.commit().addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
+    }
 }

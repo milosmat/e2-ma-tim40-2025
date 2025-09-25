@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Random;
 
 public class BattleManager {
-    private final SessionManager sessionManager;
     private Player player;
     private Boss boss;
     private int attemptsLeft = 5;
@@ -22,10 +21,9 @@ public class BattleManager {
     private boolean equipmentDropped = false;
     private boolean weapon = false;
 
-    public BattleManager(Player player, Boss boss, List<Equipment> activeItems, SessionManager sessionManager) {
+    public BattleManager(Player player, Boss boss, List<Equipment> activeItems) {
         this.player = player;
         this.boss = boss;
-        this.sessionManager = sessionManager;
         applyEquipment(player, activeItems);
         this.attemptsLeft = maxAttempts;
     }
@@ -109,7 +107,6 @@ public class BattleManager {
 
         // očisti potrošene ili istekle
         activeItems.removeIf(e -> e.isConsumable() || e.getDuration() == 0);
-        sessionManager.updateActiveEquipment(activeItems);
 
     }
 

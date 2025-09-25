@@ -11,8 +11,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.example.mobilneaplikacije.data.manager.SessionManager;
-import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.ui.auth.LoginFragment;
 import com.example.mobilneaplikacije.ui.category.CategoryListFragment;
 import com.example.mobilneaplikacije.ui.profile.ProfileFragment;
@@ -39,18 +37,10 @@ public class MainActivity extends AppCompatActivity {
 
 
         // treba da se skloni
-        FirebaseAuth.getInstance().signOut();
+        //FirebaseAuth.getInstance().signOut();
 
         toolbar = findViewById(R.id.topAppBar);
         setSupportActionBar(toolbar);
-
-        SessionManager session = new SessionManager(this);
-
-        // samo ako je korisnik nov ili testiramo
-        Player player = session.getPlayer();
-        if (player.getXp() == 0 && player.getLevel() == 1) {
-            session.giveTestPlayer();
-        }
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -95,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        // 🔑 Provera Firebase usera na startu
+        // Provera Firebase usera na startu
         if (savedInstanceState == null) {
             FirebaseAuth auth = FirebaseAuth.getInstance();
             FirebaseUser u = auth.getCurrentUser();
@@ -116,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
                         .replace(R.id.fragment_container, new TaskListFragment())
                         .commit();
                 bottomNav.setVisibility(View.VISIBLE);
-                toolbar.setVisibility(View.GONE);
+                toolbar.setVisibility(View.VISIBLE);
             }
         }
     }
@@ -139,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    // 🟢 Helper metoda za login/logout fragmente da prikažu ili sakriju bottom nav
+    // Helper metoda za login/logout fragmente da prikažu ili sakriju bottom nav
     public void setBottomNavVisible(boolean visible) {
         if (bottomNav != null) {
             bottomNav.setVisibility(visible ? View.VISIBLE : View.GONE);

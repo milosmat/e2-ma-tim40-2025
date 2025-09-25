@@ -25,7 +25,6 @@ import com.airbnb.lottie.LottieAnimationView;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.manager.BattleManager;
 import com.example.mobilneaplikacije.data.manager.LevelManager;
-import com.example.mobilneaplikacije.data.manager.SessionManager;
 import com.example.mobilneaplikacije.data.model.Boss;
 import com.example.mobilneaplikacije.data.model.Equipment;
 import com.example.mobilneaplikacije.data.model.Player;
@@ -68,23 +67,6 @@ public class BossFragment extends Fragment implements SensorEventListener {
         LinearLayout llActiveEquipment = view.findViewById(R.id.llActiveEquipment);
 
         // Dummy podaci (kasnije povezujemo sa bazom / logikom nivoa)
-        SessionManager session = new SessionManager(requireContext());
-        List<Equipment> active = session.getActiveEquipment();
-        for (Equipment e : active) {
-            ImageView icon = new ImageView(requireContext());
-            icon.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
-
-            switch (e.getEffect()) {
-                case INCREASE_PP: icon.setImageResource(R.drawable.ic_gloves); break;
-                case INCREASE_SUCCESS: icon.setImageResource(R.drawable.ic_shield); break;
-                case EXTRA_ATTACK: icon.setImageResource(R.drawable.ic_boots); break;
-                case EXTRA_COINS: icon.setImageResource(R.drawable.ic_bow); break;
-            }
-            llActiveEquipment.addView(icon);
-        }
-        player = session.getPlayer();
-        boss = session.getBossState(player); // povuci stanje bossa
-        battleManager = new BattleManager(player, boss, active, session);
 
         // Init UI
         pbBossHp.setMax(boss.getMaxHp());
@@ -98,12 +80,6 @@ public class BossFragment extends Fragment implements SensorEventListener {
 
         // Napad klikom
         btnAttack.setOnClickListener(v -> handleAttack());
-
-        // Klik na kovčeg (otvara nagrade)
-        lavChest.setOnClickListener(v -> {
-            lavChest.playAnimation();
-            showRewards();
-        });
 
         sensorManager = (SensorManager) requireActivity().getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
@@ -189,36 +165,5 @@ public class BossFragment extends Fragment implements SensorEventListener {
     private void showBossAttack() {
         ivBoss.setImageResource(R.drawable.boss_attack);
         ivBoss.postDelayed(() -> ivBoss.setImageResource(R.drawable.boss_idle), 500);
-    }
-
-    private void showRewards() {
-        llRewards.setVisibility(View.VISIBLE);
-        int coins = battleManager.getFinalCoins();
-        tvCoins.setText("x" + coins);
-        SessionManager session = new SessionManager(requireContext());
-        // Ažuriraj coins
-        player.setCoins(player.getCoins() + coins);
-
-        //  Ako je boss poražen, možeš dodeliti i XP za prelazak nivoa
-//  Ako je boss poražen, dodeli XP
-        if (boss.isDefeated()) {
-            //player.setXp(player.getXp() + 225); // test xp ne treba za finis
-            session.clearBossState();
-        }
-
-// 🔹 Proveri level-up
-        if (LevelManager.checkLevelUp(player)) {
-            Toast.makeText(getContext(),
-                    "LEVEL UP! Sada si nivo " + player.getLevel() +
-                            " (" + player.getTitle() + ")",
-                    Toast.LENGTH_LONG).show();
-        }
-
-// Sačuvaj igrača
-        session.savePlayer(player);
-
-
-        // Ako boss nije poražen, sačuvaj i njegovo trenutno stanje
-        session.saveBossState(boss);
     }
 }

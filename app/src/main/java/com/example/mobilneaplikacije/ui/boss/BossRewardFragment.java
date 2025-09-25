@@ -15,7 +15,6 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,7 +22,6 @@ import androidx.fragment.app.Fragment;
 
 import com.airbnb.lottie.LottieAnimationView;
 import com.example.mobilneaplikacije.R;
-import com.example.mobilneaplikacije.data.manager.SessionManager;
 import com.example.mobilneaplikacije.data.model.Equipment;
 import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.ui.task.TaskListFragment;
@@ -86,9 +84,6 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
             int coins = getArguments().getInt(ARG_COINS, 0);
             boolean hasEquipment = getArguments().getBoolean(ARG_EQUIPMENT, false);
 
-            SessionManager session = new SessionManager(requireContext());
-            Player player = session.getPlayer();
-            player.setCoins(player.getCoins() + coins);
             //player.setXp(player.getXp() + 100); // test XP ne treba za finis
 
             // 🔹 Prikaži coinse
@@ -100,7 +95,6 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
 
             // 🔹 Ako je pala oprema
             if (hasEquipment) {
-                List<Equipment> inventory = session.getInventory();
                 Random rand = new Random();
                 Equipment drop;
                 int iconRes;
@@ -113,8 +107,6 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
                             Equipment.Effect.INCREASE_PP, 0.1, 2, false);
                     iconRes = R.drawable.ic_gloves;
                 }
-                inventory.add(drop);
-                session.saveInventory(inventory);
 
                 // UI prikaz opreme
                 LinearLayout itemRow = new LinearLayout(requireContext());
@@ -138,7 +130,6 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
                 llRewards.addView(itemRow);
             }
 
-            session.savePlayer(player);
         }
 
         // Prikaži Continue posle 5 sekundi

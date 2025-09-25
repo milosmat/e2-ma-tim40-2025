@@ -13,6 +13,7 @@ firebaseCrashlyticsBuildtools = "3.0.6"
 googleGmsGoogleServices = "4.4.3"
 firebaseFirestore = "26.0.1"
 firebase-bom = "33.2.0"
+firebaseAuth = "24.0.1"
 
 [libraries]
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
@@ -28,6 +29,7 @@ firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "fireb
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+google-firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
