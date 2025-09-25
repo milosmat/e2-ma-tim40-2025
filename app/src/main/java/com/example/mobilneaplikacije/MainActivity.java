@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
                 bottomNav.setVisibility(View.GONE);
                 toolbar.setVisibility(View.GONE);
             } else {
-                // Već ulogovan i verifikovan → otvaramo glavni deo
+                //Vec ulogoban i verifikovan
                 getSupportFragmentManager()
                         .beginTransaction()
                         .replace(R.id.fragment_container, new TaskListFragment())
@@ -128,8 +128,6 @@ public class MainActivity extends AppCompatActivity {
         }
         return super.onOptionsItemSelected(item);
     }
-
-    // Helper metoda za login/logout fragmente da prikažu ili sakriju bottom nav
     public void setBottomNavVisible(boolean visible) {
         if (bottomNav != null) {
             bottomNav.setVisibility(visible ? View.VISIBLE : View.GONE);
