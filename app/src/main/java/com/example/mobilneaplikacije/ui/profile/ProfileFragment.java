@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.repository.AuthRepository;
 import com.example.mobilneaplikacije.ui.auth.LoginFragment;
 import com.google.firebase.auth.*;
 import com.google.firebase.firestore.*;
@@ -24,6 +25,8 @@ public class ProfileFragment extends Fragment {
     private ImageView ivAvatar;
     private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvMissions;
     private Button btnChangePassword;
+
+    private AuthRepository authRepo;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -42,11 +45,11 @@ public class ProfileFragment extends Fragment {
         tvPP = view.findViewById(R.id.tvPP);
         tvXP = view.findViewById(R.id.tvXP);
         tvCoins = view.findViewById(R.id.tvCoins);
-        tvMissions = view.findViewById(R.id.tvMissions);
 
         Button btnLogout = view.findViewById(R.id.btnLogout);
         btnChangePassword = view.findViewById(R.id.btnChangePassword);
 
+        authRepo = new AuthRepository();
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
         user = auth.getCurrentUser();
@@ -148,7 +151,7 @@ public class ProfileFragment extends Fragment {
                 );
     }
     private void logOut() {
-        auth.signOut();
+        authRepo.logOut();
 
         requireActivity().getSupportFragmentManager()
                 .beginTransaction()
@@ -184,12 +187,17 @@ public class ProfileFragment extends Fragment {
                         return;
                     }
 
-                    AuthCredential credential = EmailAuthProvider.getCredential(user.getEmail(), current);
-                    user.reauthenticate(credential)
-                            .addOnSuccessListener(v -> user.updatePassword(newPas)
-                                    .addOnSuccessListener(x -> Toast.makeText(getContext(), "Lozinka promenjena", Toast.LENGTH_SHORT).show())
-                                    .addOnFailureListener(e -> Toast.makeText(getContext(), "Greska: " + e.getMessage(), Toast.LENGTH_SHORT).show()))
-                            .addOnFailureListener(e -> Toast.makeText(getContext(), "Pogresna trenutna lozinka", Toast.LENGTH_SHORT).show());
+                    authRepo.changePassword(current, newPas, new AuthRepository.AuthCallback() {
+                        @Override
+                        public void onSucces(String message) {
+                            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                        }
+
+                        @Override
+                        public void onFailure(String message) {
+                            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                        }
+                    });
                 })
                 .setNegativeButton("Otkazi", null)
                 .show();

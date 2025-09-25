@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.repository.AuthRepository;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.*;
@@ -30,6 +31,8 @@ public class RegisterFragment extends Fragment {
     private FirebaseAuth auth;
     private FirebaseFirestore db;
 
+    private AuthRepository authRepo;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -41,6 +44,8 @@ public class RegisterFragment extends Fragment {
         etPassword2 = v.findViewById(R.id.etPassword2);
         etUsername = v.findViewById(R.id.etUsername);
         btnRegister = v.findViewById(R.id.btnRegister);
+
+        authRepo = new AuthRepository();
 
         RecyclerView recyclerAvatars = v.findViewById(R.id.recyclerAvatars);
         recyclerAvatars.setLayoutManager(new LinearLayoutManager(getContext(),
@@ -71,39 +76,23 @@ public class RegisterFragment extends Fragment {
             return;
         }
 
-        auth.createUserWithEmailAndPassword(email, password)
-                .addOnSuccessListener(r -> {
-                    FirebaseUser u = auth.getCurrentUser();
-                    if (u == null) return;
+        authRepo.register(email, password, username, selectedAvatar, new AuthRepository.AuthCallback() {
+            @Override
+            public void onSucces(String message) {
+                // Uspešna registracija
+                toast(message);
+                requireActivity().getSupportFragmentManager().beginTransaction()
+                        .replace(R.id.fragment_container, new LoginFragment())
+                        .commit();
+            }
 
-                    Player p = new Player(username, selectedAvatar, 1, "Pocetnik", 0, 0, 0, 0.0);
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("username", p.getUsername());
-                    data.put("avatar", p.getAvatar());
-                    data.put("level", p.getLevel());
-                    data.put("title", p.getTitle());
-                    data.put("pp", p.getPp());
-                    data.put("xp", p.getXp());
-                    data.put("coins", p.getCoins());
-                    data.put("successRate", p.getSuccessRate());
-                    data.put("createdAt", FieldValue.serverTimestamp());
+            @Override
+            public void onFailure(String message) {
+                // Neuspešna registracija
+                toast(message);
+            }
+        });
 
-                    db.collection("users").document(u.getUid()).set(data)
-                            .addOnSuccessListener(v -> {
-                                u.sendEmailVerification()
-                                        .addOnSuccessListener(e -> {
-                                            toast("Registracija uspesna! Proveri email za verifikaciju.");
-                                            auth.signOut();
-
-                                            // prosledi ga na login fragment
-                                            requireActivity().getSupportFragmentManager()
-                                                    .beginTransaction()
-                                                    .replace(R.id.fragment_container, new LoginFragment())
-                                                    .commit();
-                                        });
-                            });
-                })
-                .addOnFailureListener(e -> toast("Greska: " + e.getMessage()));
     }
 
     private void toast(String m) {

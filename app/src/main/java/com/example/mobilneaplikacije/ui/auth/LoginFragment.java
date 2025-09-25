@@ -11,12 +11,14 @@ import androidx.fragment.app.Fragment;
 
 import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.repository.AuthRepository;
 import com.google.firebase.auth.*;
 
 public class LoginFragment extends Fragment {
 
     private EditText etEmail, etPassword;
     private FirebaseAuth auth;
+    private AuthRepository authRepo;
 
     @Nullable
     @Override
@@ -29,6 +31,7 @@ public class LoginFragment extends Fragment {
         Button goRegisterBtn = v.findViewById(R.id.btnGoRegister);
 
         auth = FirebaseAuth.getInstance();
+        authRepo = new AuthRepository();
 
         loginBtn.setOnClickListener(x -> LogIn());
 
@@ -50,28 +53,23 @@ public class LoginFragment extends Fragment {
             return;
         }
 
-        auth.signInWithEmailAndPassword(email, pass)
-                .addOnSuccessListener(r -> {
-                    FirebaseUser u = auth.getCurrentUser();
-                    if (u != null && u.isEmailVerified()) {
-                        toast("Dobrodosao!");
+        authRepo.login(email, pass, new AuthRepository.AuthCallback() {
+            @Override
+            public void onSucces(String message) {
+                toast(message);
+                ((MainActivity) requireActivity()).setBottomNavVisible(true);
+                ((MainActivity) requireActivity()).setToolbarVisible(true);
 
-                        // prikazi navbarove
-                        ((MainActivity) requireActivity()).setBottomNavVisible(true);
-                        ((MainActivity) requireActivity()).setToolbarVisible(true);
-
-                        // prebaci na TaskListFragment i ocisti backstack
-                        requireActivity().getSupportFragmentManager()
-                                .beginTransaction()
-                                .replace(R.id.fragment_container,
-                                        new com.example.mobilneaplikacije.ui.task.TaskListFragment())
-                                .commit();
-                    } else {
-                        toast("Nalog nije aktiviran. Proveri email.");
-                        auth.signOut();
-                    }
-                })
-                .addOnFailureListener(e -> toast("Greska: " + e.getMessage()));
+                requireActivity().getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.fragment_container, new TaskListFragment())
+                        .commit();
+            }
+            @Override
+            public void onFailure(String message) {
+                toast(message);
+            }
+        });
     }
 
     private void toast(String m) {
