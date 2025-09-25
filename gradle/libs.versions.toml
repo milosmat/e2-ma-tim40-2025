@@ -1,5 +1,5 @@
 [versions]
-agp = "8.11.2"
+agp = "8.13.0"
 gson = "2.13.2"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -10,6 +10,9 @@ material = "1.10.0"
 activity = "1.8.0"
 constraintlayout = "2.1.4"
 firebaseCrashlyticsBuildtools = "3.0.6"
+googleGmsGoogleServices = "4.4.3"
+firebaseFirestore = "26.0.1"
+firebase-bom = "33.2.0"
 
 [libraries]
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
@@ -22,7 +25,11 @@ material = { group = "com.google.android.material", name = "material", version.r
 activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
 

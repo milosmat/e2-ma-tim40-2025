@@ -3,6 +3,7 @@ package com.example.mobilneaplikacije;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -12,6 +13,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.mobilneaplikacije.data.manager.SessionManager;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.ui.auth.LoginFragment;
 import com.example.mobilneaplikacije.ui.category.CategoryListFragment;
 import com.example.mobilneaplikacije.ui.profile.ProfileFragment;
 import com.example.mobilneaplikacije.ui.task.AddTaskFragment;
@@ -21,7 +23,13 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.example.mobilneaplikacije.ui.boss.BossFragment;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
 public class MainActivity extends AppCompatActivity {
+
+    private BottomNavigationView bottomNav;
+    private MaterialToolbar toolbar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,22 +37,28 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
 
-        MaterialToolbar toolbar = findViewById(R.id.topAppBar);
+
+        // treba da se skloni
+        FirebaseAuth.getInstance().signOut();
+
+        toolbar = findViewById(R.id.topAppBar);
         setSupportActionBar(toolbar);
+
         SessionManager session = new SessionManager(this);
 
-// samo ako je korisnik nov ili testiramo
+        // samo ako je korisnik nov ili testiramo
         Player player = session.getPlayer();
         if (player.getXp() == 0 && player.getLevel() == 1) {
             session.giveTestPlayer();
         }
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
 
-        BottomNavigationView bottomNav = findViewById(R.id.bottomNav);
+        bottomNav = findViewById(R.id.bottomNav);
         bottomNav.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
             if (id == R.id.nav_list) {
@@ -59,13 +73,13 @@ public class MainActivity extends AppCompatActivity {
                         .replace(R.id.fragment_container, new AddTaskFragment())
                         .commit();
                 return true;
-            }else if (id == R.id.nav_calendar) {
+            } else if (id == R.id.nav_calendar) {
                 getSupportFragmentManager()
                         .beginTransaction()
                         .replace(R.id.fragment_container, new TaskCalendarFragment())
                         .commit();
                 return true;
-            }else if (id == R.id.nav_categories) {
+            } else if (id == R.id.nav_categories) {
                 getSupportFragmentManager()
                         .beginTransaction()
                         .replace(R.id.fragment_container, new CategoryListFragment())
@@ -81,14 +95,33 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        // Default fragment kada se app otvori (lista zadataka)
+        // 🔑 Provera Firebase usera na startu
         if (savedInstanceState == null) {
-            getSupportFragmentManager()
-                    .beginTransaction()
-                    .replace(R.id.fragment_container, new TaskListFragment())
-                    .commit();
+            FirebaseAuth auth = FirebaseAuth.getInstance();
+            FirebaseUser u = auth.getCurrentUser();
+
+            if (u == null || !u.isEmailVerified()) {
+                if (u != null) auth.signOut();
+                // Nije ulogovan ili nije verifikovan → otvaramo login
+                getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.fragment_container, new LoginFragment())
+                        .commit();
+                bottomNav.setVisibility(View.GONE);
+                toolbar.setVisibility(View.GONE);
+            } else {
+                // Već ulogovan i verifikovan → otvaramo glavni deo
+                getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.fragment_container, new TaskListFragment())
+                        .commit();
+                bottomNav.setVisibility(View.VISIBLE);
+                toolbar.setVisibility(View.GONE);
+            }
         }
     }
+
+    @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.top_nav_bar, menu);
         return true;
@@ -104,5 +137,18 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    // 🟢 Helper metoda za login/logout fragmente da prikažu ili sakriju bottom nav
+    public void setBottomNavVisible(boolean visible) {
+        if (bottomNav != null) {
+            bottomNav.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    public void setToolbarVisible(boolean visible) {
+        if (toolbar != null) {
+            toolbar.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
     }
 }

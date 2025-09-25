@@ -1,24 +1,33 @@
 package com.example.mobilneaplikacije.ui.profile;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
+import android.widget.*;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
-import com.example.mobilneaplikacije.data.manager.SessionManager;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.ui.auth.LoginFragment;
+import com.google.firebase.auth.*;
+import com.google.firebase.firestore.*;
 
 public class ProfileFragment extends Fragment {
 
     private ImageView ivAvatar;
     private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvMissions;
+    private Button btnChangePassword;
+
+    private FirebaseAuth auth;
+    private FirebaseFirestore db;
+    private FirebaseUser user;
 
     @Nullable
     @Override
@@ -35,29 +44,105 @@ public class ProfileFragment extends Fragment {
         tvCoins = view.findViewById(R.id.tvCoins);
         tvMissions = view.findViewById(R.id.tvMissions);
 
+        Button btnLogout = view.findViewById(R.id.btnLogout);
+        btnChangePassword = view.findViewById(R.id.btnChangePassword);
+
+        auth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+        user = auth.getCurrentUser();
+
+        btnLogout.setOnClickListener(v -> logOut());
+        btnChangePassword.setOnClickListener(v -> showChangePasswordDialog());
+
         return view;
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        loadProfileData(); // 🔄 svaki put kad se vratiš na ekran, učita najnovije
+        loadProfileData();
     }
 
     private void loadProfileData() {
-        SessionManager session = new SessionManager(requireContext());
-        Player player = session.getPlayer();
+        if (user == null) return;
 
-        tvUsername.setText(player.getUsername());
-        tvLevel.setText("Nivo: " + player.getLevel());
-        tvTitle.setText("Titula: " + player.getTitle());
-        tvPP.setText("PP: " + player.getPp());
-        tvXP.setText("XP: " + player.getXp());
-        tvCoins.setText("Novčići: " + player.getCoins());
+        db.collection("users").document(user.getUid())
+                .get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Player player = new Player(
+                                doc.getString("username"),
+                                doc.getString("avatar"),
+                                doc.getLong("level").intValue(),
+                                doc.getString("title"),
+                                doc.getLong("pp").intValue(),
+                                doc.getLong("xp").intValue(),
+                                doc.getLong("coins").intValue(),
+                                doc.getDouble("successRate")
+                        );
 
-        int avatarRes = getResources().getIdentifier(player.getAvatar(), "drawable", requireContext().getPackageName());
-        if (avatarRes != 0) {
-            ivAvatar.setImageResource(avatarRes);
-        }
+                        tvUsername.setText(player.getUsername());
+                        tvLevel.setText("Nivo: " + player.getLevel());
+                        tvTitle.setText("Titula: " + player.getTitle());
+                        tvPP.setText("PP: " + player.getPp());
+                        tvXP.setText("XP: " + player.getXp());
+                        tvCoins.setText("Novcici: " + player.getCoins());
+                        tvMissions.setText("Zavrsene misije: 0"); // nije DOVRSENO !!!
+
+                        int avatarRes = getResources().getIdentifier(
+                                player.getAvatar(), "drawable", requireContext().getPackageName());
+                        if (avatarRes != 0) {
+                            ivAvatar.setImageResource(avatarRes);
+                        }
+                    }
+                });
+    }
+
+    private void logOut() {
+        auth.signOut();
+
+        requireActivity().getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.fragment_container, new LoginFragment())
+                .commit();
+
+        ((MainActivity) requireActivity()).setBottomNavVisible(false);
+        ((MainActivity) requireActivity()).setToolbarVisible(false);
+    }
+
+    private void showChangePasswordDialog() {
+        View dialogView = LayoutInflater.from(getContext())
+                .inflate(R.layout.dialog_change_password, null);
+
+        EditText etCurrent = dialogView.findViewById(R.id.etCurrentPassword);
+        EditText etNewPass = dialogView.findViewById(R.id.etNewPassword);
+        EditText etNewPass2 = dialogView.findViewById(R.id.etNewPassword2);
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Promena lozinke")
+                .setView(dialogView)
+                .setPositiveButton("Promeni", (d, w) -> {
+                    String current = etCurrent.getText().toString();
+                    String newPas = etNewPass.getText().toString();
+                    String newPas2 = etNewPass2.getText().toString();
+
+                    if (TextUtils.isEmpty(current) || TextUtils.isEmpty(newPas) || TextUtils.isEmpty(newPas2)) {
+                        Toast.makeText(getContext(), "Popuni sva polja", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (!newPas.equals(newPas2)) {
+                        Toast.makeText(getContext(), "Nove lozinke se ne poklapaju", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    AuthCredential credential = EmailAuthProvider.getCredential(user.getEmail(), current);
+                    user.reauthenticate(credential)
+                            .addOnSuccessListener(v -> user.updatePassword(newPas)
+                                    .addOnSuccessListener(x -> Toast.makeText(getContext(), "Lozinka promenjena", Toast.LENGTH_SHORT).show())
+                                    .addOnFailureListener(e -> Toast.makeText(getContext(), "Greska: " + e.getMessage(), Toast.LENGTH_SHORT).show()))
+                            .addOnFailureListener(e -> Toast.makeText(getContext(), "Pogresna trenutna lozinka", Toast.LENGTH_SHORT).show());
+                })
+                .setNegativeButton("Otkazi", null)
+                .show();
     }
 }

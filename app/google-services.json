@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "442505972094",
+    "project_id": "mobilneaplikacije-ed99b",
+    "storage_bucket": "mobilneaplikacije-ed99b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:442505972094:android:5cf908ed14072303f74b2f",
+        "android_client_info": {
+          "package_name": "com.example.mobilneaplikacije"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6YKYGkZ27q3wZp6v90VXjeHMjgRPoXso"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
