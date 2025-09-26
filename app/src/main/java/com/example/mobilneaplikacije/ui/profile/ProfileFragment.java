@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment;
 
 import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.manager.LevelManager;
 import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.repository.AuthRepository;
 import com.example.mobilneaplikacije.data.repository.PlayerRepository;
@@ -24,9 +25,10 @@ import com.google.firebase.firestore.*;
 public class ProfileFragment extends Fragment {
 
     private ImageView ivAvatar;
-    private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvMissions;
+    private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvNexLvlXP , tvMissions;
     private Button btnChangePassword;
 
+    private LevelManager levelManager;
     private AuthRepository authRepo;
 
     private FirebaseAuth auth;
@@ -46,6 +48,7 @@ public class ProfileFragment extends Fragment {
         tvTitle = view.findViewById(R.id.tvTitle);
         tvPP = view.findViewById(R.id.tvPP);
         tvXP = view.findViewById(R.id.tvXP);
+        tvNexLvlXP = view.findViewById(R.id.tvNextLvlXP);
         tvCoins = view.findViewById(R.id.tvCoins);
 
         Button btnLogout = view.findViewById(R.id.btnLogout);
@@ -56,6 +59,7 @@ public class ProfileFragment extends Fragment {
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
         user = auth.getCurrentUser();
+        levelManager = new LevelManager();
 
         btnLogout.setOnClickListener(v -> logOut());
         btnChangePassword.setOnClickListener(v -> showChangePasswordDialog());
@@ -78,6 +82,7 @@ public class ProfileFragment extends Fragment {
                 tvTitle.setText("Titula: " + player.getTitle());
                 tvPP.setText("PP: " + player.getPp());
                 tvXP.setText("XP: " + player.getXp());
+                tvNexLvlXP.setText("Potreban XP za sledeci nivo: " + levelManager.getXpForNextLevel(player.getLevel()));
                 tvCoins.setText("Novcici: " + player.getCoins());
 
                 int avatarRes = getResources().getIdentifier(
