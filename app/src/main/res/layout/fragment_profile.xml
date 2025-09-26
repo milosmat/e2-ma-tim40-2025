@@ -34,13 +34,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"/>
 
-        <TextView android:id="@+id/tvXP"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
-        <TextView android:id="@+id/tvNextLvlXP"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+        <ProgressBar
+            android:id="@+id/progressBarXP"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="50"
+            android:layout_marginTop="8dp"
+            style="@android:style/Widget.ProgressBar.Horizontal"/>
 
         <TextView android:id="@+id/tvCoins"
             android:layout_width="wrap_content"

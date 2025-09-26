@@ -47,8 +47,8 @@ public class ProfileFragment extends Fragment {
         tvLevel = view.findViewById(R.id.tvLevel);
         tvTitle = view.findViewById(R.id.tvTitle);
         tvPP = view.findViewById(R.id.tvPP);
-        tvXP = view.findViewById(R.id.tvXP);
-        tvNexLvlXP = view.findViewById(R.id.tvNextLvlXP);
+        //tvXP = view.findViewById(R.id.tvXP);
+        //tvNexLvlXP = view.findViewById(R.id.tvNextLvlXP);
         tvCoins = view.findViewById(R.id.tvCoins);
 
         Button btnLogout = view.findViewById(R.id.btnLogout);
@@ -81,8 +81,13 @@ public class ProfileFragment extends Fragment {
                 tvLevel.setText("Nivo: " + player.getLevel());
                 tvTitle.setText("Titula: " + player.getTitle());
                 tvPP.setText("PP: " + player.getPp());
-                tvXP.setText("XP: " + player.getXp());
-                tvNexLvlXP.setText("Potreban XP za sledeci nivo: " + levelManager.getXpForNextLevel(player.getLevel()));
+                //tvXP.setText("XP: " + player.getXp());
+                //tvNexLvlXP.setText("Potreban XP za sledeci nivo: " + levelManager.getXpForNextLevel(player.getLevel()));
+
+                ProgressBar progressBar = getView().findViewById(R.id.progressBarXP);
+                progressBar.setMax( levelManager.getXpForNextLevel(player.getLevel()));
+                progressBar.setProgress(player.getXp());
+
                 tvCoins.setText("Novcici: " + player.getCoins());
 
                 int avatarRes = getResources().getIdentifier(
