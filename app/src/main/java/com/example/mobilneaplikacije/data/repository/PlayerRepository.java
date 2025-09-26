@@ -15,8 +15,6 @@ public class PlayerRepository {
         db = FirebaseFirestore.getInstance();
         auth = FirebaseAuth.getInstance();
     }
-
-    // Pozovi na login/logout da očistiš sve
     public static void invalidateCache() {
         cachedPlayer = null;
         cachedUid = null;
@@ -41,13 +39,11 @@ public class PlayerRepository {
             return;
         }
 
-        // Ako je keširan isti UID, vrati odmah
         if (cachedPlayer != null && uid.equals(cachedUid)) {
             callback.onSuccess(cachedPlayer);
             return;
         }
 
-        // U suprotnom, povuci sveže sa servera
         db.collection("users").document(uid)
                 .get(com.google.firebase.firestore.Source.SERVER)
                 .addOnSuccessListener(doc -> {
@@ -66,7 +62,7 @@ public class PlayerRepository {
                         cachedUid = uid;
                         callback.onSuccess(p);
                     } else {
-                        callback.onFailure(new Exception("Korisnički podaci nisu pronađeni"));
+                        callback.onFailure(new Exception("Korisnicki podaci nisu pronadjeni"));
                     }
                 })
                 .addOnFailureListener(callback::onFailure);
@@ -93,7 +89,6 @@ public class PlayerRepository {
     }
 
     public void refreshSuccessRate(TaskRepository taskRepo, final PlayerCallback callback) {
-        // osiguraj da je player učitan pre računanja
         loadPlayer(new PlayerCallback() {
             @Override
             public void onSuccess(Player player) {
