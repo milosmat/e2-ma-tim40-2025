@@ -28,7 +28,10 @@ import com.example.mobilneaplikacije.data.manager.LevelManager;
 import com.example.mobilneaplikacije.data.model.Boss;
 import com.example.mobilneaplikacije.data.model.Equipment;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.repository.PlayerRepository;
+import com.example.mobilneaplikacije.data.repository.TaskRepository;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class BossFragment extends Fragment implements SensorEventListener {
@@ -47,50 +50,52 @@ public class BossFragment extends Fragment implements SensorEventListener {
     private Player player;
     private Boss boss;
 
-    @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater,
-                             @Nullable ViewGroup container,
-                             @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_boss, container, false);
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
 
         ivBoss = view.findViewById(R.id.ivBoss);
         pbBossHp = view.findViewById(R.id.pbBossHp);
         pbPlayerPp = view.findViewById(R.id.pbPlayerPp);
         tvSuccessRate = view.findViewById(R.id.tvSuccessRate);
-        tvAttempts = view.findViewById(R.id.tvAttempts);
         tvBattleLog = view.findViewById(R.id.tvBattleLog);
+        tvCoins = view.findViewById(R.id.tvCoins);
         btnAttack = view.findViewById(R.id.btnAttack);
         lavChest = view.findViewById(R.id.lavChest);
         llRewards = view.findViewById(R.id.llRewards);
-        tvCoins = view.findViewById(R.id.tvCoins);
-        LinearLayout llActiveEquipment = view.findViewById(R.id.llActiveEquipment);
-
-        // Dummy podaci (kasnije povezujemo sa bazom / logikom nivoa)
-
-        // Init UI
-        pbBossHp.setMax(boss.getMaxHp());
-        pbBossHp.setProgress(boss.getHp());
-
-        pbPlayerPp.setMax(100);
-        pbPlayerPp.setProgress(player.getPp());
-
-        tvSuccessRate.setText("Šansa za pogodak: " + player.getSuccessRate() + "%");
-        tvAttempts.setText("Pokušaji: 5/5");
-
-        // Napad klikom
-        btnAttack.setOnClickListener(v -> handleAttack());
 
         sensorManager = (SensorManager) requireActivity().getSystemService(Context.SENSOR_SERVICE);
-        if (sensorManager != null) {
-            Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
-        }
-
         accelCurrent = SensorManager.GRAVITY_EARTH;
         accelLast = SensorManager.GRAVITY_EARTH;
 
-        return view;
+        PlayerRepository playerRepo = new PlayerRepository();
+        TaskRepository taskRepo = new TaskRepository(requireContext());
+
+        playerRepo.refreshSuccessRate(taskRepo, new PlayerRepository.PlayerCallback() {
+            @Override
+            public void onSuccess(Player p) {
+                player = p;
+                boss = new Boss(player.getLevel(), 200, 200);
+                battleManager = new BattleManager(player, boss, new ArrayList<>());
+                initUi();
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                Toast.makeText(requireContext(), "Greška: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void initUi() {
+        pbBossHp.setMax(boss.getMaxHp());
+        pbBossHp.setProgress(boss.getHp());
+
+        pbPlayerPp.setMax(player.getPp());
+        pbPlayerPp.setProgress(player.getPp());
+
+        tvSuccessRate.setText("Šansa za pogodak: " + player.getSuccessRate() + "%");
+        tvAttempts.setText("Pokušaji: " + battleManager.getAttemptsLeft() + "/" + battleManager.getMaxAttempts());
     }
     @Override
     public void onSensorChanged(SensorEvent event) {
@@ -111,23 +116,33 @@ public class BossFragment extends Fragment implements SensorEventListener {
     }
 
     @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+        sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+    }
+    @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
     @Override
     public void onResume() {
         super.onResume();
-        Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        if (accelerometer != null) {
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+        if (sensorManager != null) {
+            Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (accelerometer != null) {
+                sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+            }
         }
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        sensorManager.unregisterListener(this);
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
     }
     private void handleAttack() {
+        if (battleManager == null || boss == null || player == null) return;
         String result = battleManager.attack();
 
         if (result.contains("Uspešan napad")) {
@@ -140,15 +155,15 @@ public class BossFragment extends Fragment implements SensorEventListener {
 
         // Update UI
         pbBossHp.setProgress(boss.getHp());
-        tvAttempts.setText("Pokušaji: " + battleManager.getAttemptsLeft() + "/5");
+        tvAttempts.setText("Pokušaji: " + battleManager.getAttemptsLeft() + "/" + battleManager.getMaxAttempts());
         tvBattleLog.setText(result);
 
         if (battleManager.isFinished()) {
+            sensorManager.unregisterListener(this);
             getParentFragmentManager()
                     .beginTransaction()
                     .replace(R.id.fragment_container,
-                            BossRewardFragment.newInstance(battleManager.getFinalCoins(),
-                                    battleManager.hasEquipment()))
+                            BossRewardFragment.newInstance(battleManager.getFinalCoins(), battleManager.hasEquipment()))
                     .commit();
         }
     }

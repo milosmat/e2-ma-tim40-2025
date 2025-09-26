@@ -5,13 +5,17 @@ import android.view.*;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.annotation.*;
 
 import androidx.fragment.app.Fragment;
+
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.manager.LevelManager;
 import com.example.mobilneaplikacije.data.model.Task;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
 
+import com.example.mobilneaplikacije.ui.boss.BossFragment;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -33,7 +37,8 @@ public class TaskDetailFragment extends Fragment {
     private TextView tvTitle, tvDescription, tvCategory, tvDifficulty, tvImportance, tvXpPoints, tvStatus;
     private Button btnMarkDone, btnPause, btnCancel, btnDelete, btnEdit;
 
-    public TaskDetailFragment() {}
+    public TaskDetailFragment() {
+    }
 
     private Task taskFromSnap(DocumentSnapshot d) {
         Task t = new Task();
@@ -43,16 +48,23 @@ public class TaskDetailFragment extends Fragment {
         t.setCategoryIdHash(d.getString("categoryId"));
         t.setDifficulty(d.getString("difficulty"));
         t.setImportance(d.getString("importance"));
-        Long xp = d.getLong("xpPoints"); t.setXpPoints(xp == null ? 0 : xp.intValue());
+        Long xp = d.getLong("xpPoints");
+        t.setXpPoints(xp == null ? 0 : xp.intValue());
         t.setStatus(d.getString("status"));
-        Boolean rec = d.getBoolean("isRecurring"); t.setRecurring(Boolean.TRUE.equals(rec));
-        Long ri = d.getLong("repeatInterval"); t.setRepeatInterval(ri == null ? 0 : ri.intValue());
+        Boolean rec = d.getBoolean("isRecurring");
+        t.setRecurring(Boolean.TRUE.equals(rec));
+        Long ri = d.getLong("repeatInterval");
+        t.setRepeatInterval(ri == null ? 0 : ri.intValue());
         t.setRepeatUnit(d.getString("repeatUnit"));
-        Long sd = d.getLong("startDate"); t.setStartDate(sd == null ? 0 : sd);
-        Long ed = d.getLong("endDate");   t.setEndDate(ed == null ? 0 : ed);
-        Long due = d.getLong("dueDateTime"); t.setDueDateTime(due == null ? 0 : due);
+        Long sd = d.getLong("startDate");
+        t.setStartDate(sd == null ? 0 : sd);
+        Long ed = d.getLong("endDate");
+        t.setEndDate(ed == null ? 0 : ed);
+        Long due = d.getLong("dueDateTime");
+        t.setDueDateTime(due == null ? 0 : due);
         return t;
     }
+
     private void loadCategoryName(String categoryIdHash) {
         String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser().getUid();
         com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -87,6 +99,7 @@ public class TaskDetailFragment extends Fragment {
         lastTaskIsRecurring = t.isRecurring();
         lastTaskStatus = t.getStatus();
     }
+
     public static TaskDetailFragment newInstance(String taskIdHash, @Nullable String occurrenceId) {
         TaskDetailFragment f = new TaskDetailFragment();
         Bundle b = new Bundle();
@@ -96,7 +109,8 @@ public class TaskDetailFragment extends Fragment {
         return f;
     }
 
-    @Nullable @Override
+    @Nullable
+    @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
@@ -156,43 +170,58 @@ public class TaskDetailFragment extends Fragment {
 
         btnMarkDone.setOnClickListener(x -> {
             repo.getTaskById(taskIdHash, new TaskRepository.Callback<Task>() {
-                @Override public void onSuccess(Task t) {
+                @Override
+                public void onSuccess(Task t) {
                     if (t == null) return;
                     if (occurrenceId != null) {
                         // DONE occurrence
-                        repo.markOccurrenceDone(taskIdHash, occurrenceId, t.getXpPoints(), t.getDifficulty(), t.getImportance(),
-                                new TaskRepository.Callback<Integer>() {
-                                    @Override public void onSuccess(@Nullable Integer award) {
-                                        afterDoneXP(award == null ? 0 : award);
-                                        updateButtons(lastTaskIsRecurring, "DONE", occurrenceId != null ? "DONE" : null);
+                        repo.markOccurrenceDone(taskIdHash, occurrenceId, 0, t.getDifficulty(), t.getImportance(),
+                                new TaskRepository.Callback<Void>() {
+                                    @Override
+                                    public void onSuccess(@Nullable Void v) {
+                                        giveXpFromTask(t); // koristi LevelManager
+                                        updateButtons(lastTaskIsRecurring, "DONE", "DONE");
                                     }
-                                    @Override public void onError(Exception e) { handleDoneError(e); }
+
+                                    @Override
+                                    public void onError(Exception e) {
+                                        handleDoneError(e);
+                                    }
                                 });
 
                     } else if (!t.isRecurring()) {
                         // DONE single
-                        repo.markSingleDone(taskIdHash, t.getXpPoints(), t.getDifficulty(), t.getImportance(),
-                                new TaskRepository.Callback<Integer>() {
-                                    @Override public void onSuccess(@Nullable Integer award) {
-                                        afterDoneXP(award == null ? 0 : award);
-                                        updateButtons(lastTaskIsRecurring, "DONE", occurrenceId != null ? "DONE" : null);
+                        repo.markSingleDone(taskIdHash, 0, t.getDifficulty(), t.getImportance(),
+                                new TaskRepository.Callback<Void>() {
+                                    @Override
+                                    public void onSuccess(@Nullable Void v) {
+                                        giveXpFromTask(t);
+                                        updateButtons(lastTaskIsRecurring, "DONE", "DONE");
                                     }
-                                    @Override public void onError(Exception e) { handleDoneError(e); }
+
+                                    @Override
+                                    public void onError(Exception e) {
+                                        handleDoneError(e);
+                                    }
                                 });
                     } else {
-                        Toast.makeText(getContext(),"Za ponavljajući sa kalendara prosledi occurrence.",Toast.LENGTH_LONG).show();
+                        Toast.makeText(getContext(), "Za ponavljajući sa kalendara prosledi occurrence.", Toast.LENGTH_LONG).show();
                     }
                 }
-                @Override public void onError(Exception e) { }
+
+                @Override
+                public void onError(Exception e) {
+                }
             });
         });
 
         btnPause.setOnClickListener(x -> {
             repo.getTaskById(taskIdHash, new TaskRepository.Callback<Task>() {
-                @Override public void onSuccess(Task t) {
+                @Override
+                public void onSuccess(Task t) {
                     if (t == null) return;
                     if (!t.isRecurring()) {
-                        Toast.makeText(getContext(),"Samo ponavljajući zadaci se pauziraju.",Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Samo ponavljajući zadaci se pauziraju.", Toast.LENGTH_SHORT).show();
                         return;
                     }
                     if ("PAUSED".equals(t.getStatus())) {
@@ -200,13 +229,16 @@ public class TaskDetailFragment extends Fragment {
                     } else if ("ACTIVE".equals(t.getStatus())) {
                         repo.pauseRecurringMaster(taskIdHash, toastCb("Zadatak pauziran"));
                     } else {
-                        Toast.makeText(getContext(),"Akcija nije dozvoljena!",Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Akcija nije dozvoljena!", Toast.LENGTH_SHORT).show();
                     }
                     String newMaster = "ACTIVE".equals(lastTaskStatus) ? "PAUSED" : "ACTIVE";
                     lastTaskStatus = newMaster;
                     updateButtons(true, newMaster, null);
                 }
-                @Override public void onError(Exception e) { }
+
+                @Override
+                public void onError(Exception e) {
+                }
             });
         });
 
@@ -221,12 +253,15 @@ public class TaskDetailFragment extends Fragment {
 
         btnDelete.setOnClickListener(x -> {
             repo.deleteTask(taskIdHash, new TaskRepository.Callback<Void>() {
-                @Override public void onSuccess(Void v) {
-                    Toast.makeText(getContext(),"Zadatak obrisan / skraćen (buduće pojave)",Toast.LENGTH_SHORT).show();
+                @Override
+                public void onSuccess(Void v) {
+                    Toast.makeText(getContext(), "Zadatak obrisan / skraćen (buduće pojave)", Toast.LENGTH_SHORT).show();
                     requireActivity().onBackPressed();
                 }
-                @Override public void onError(Exception e) {
-                    Toast.makeText(getContext(),"Brisanje nije dozvoljeno: "+e.getMessage(),Toast.LENGTH_LONG).show();
+
+                @Override
+                public void onError(Exception e) {
+                    Toast.makeText(getContext(), "Brisanje nije dozvoljeno: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
         });
@@ -234,7 +269,8 @@ public class TaskDetailFragment extends Fragment {
         return v;
     }
 
-    @Override public void onDestroyView() {
+    @Override
+    public void onDestroyView() {
         super.onDestroyView();
         if (taskReg != null) taskReg.remove();
         if (occReg != null) occReg.remove();
@@ -243,24 +279,16 @@ public class TaskDetailFragment extends Fragment {
 
     private TaskRepository.Callback<Void> toastCb(String msg) {
         return new TaskRepository.Callback<Void>() {
-            @Override public void onSuccess(Void v) { Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show(); }
-            @Override public void onError(Exception e) { Toast.makeText(getContext(), "Greška: "+e.getMessage(), Toast.LENGTH_LONG).show(); }
+            @Override
+            public void onSuccess(Void v) {
+                Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Toast.makeText(getContext(), "Greška: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
         };
-    }
-
-    private void afterDoneXP(int xpAwarded) {
-        if (!isAdded()) return;
-
-        String msg = xpAwarded > 0 ? ("Urađeno! +" + xpAwarded + " XP") : "Urađeno! (bez XP, pređena kvota)";
-        Toast.makeText(getContext(), msg, Toast.LENGTH_LONG).show();
-
-        btnMarkDone.setEnabled(false);
-        btnCancel.setEnabled(false);
-
-        Bundle res = new Bundle();
-        res.putString("task_id_hash", taskIdHash);
-        if (occurrenceId != null) res.putString("occurrence_id", occurrenceId);
-        getParentFragmentManager().setFragmentResult("task_changed", res);
     }
 
     private void updateButtons(boolean isRecurring,
@@ -309,5 +337,43 @@ public class TaskDetailFragment extends Fragment {
         String msg = "Greška: " + e.getMessage();
         if ("XP_QUOTA_EXCEEDED".equals(e.getMessage())) msg = "Pređena je dnevna/nev/mes kvota XP.";
         Toast.makeText(getContext(), msg, Toast.LENGTH_LONG).show();
+    }
+
+    private void giveXpFromTask(Task t) {
+        LevelManager lm = new LevelManager();
+        lm.getTaskDifficultyXp(t.getDifficulty(), new LevelManager.XpCallback() {
+            @Override
+            public void onSucces(int diffXp) {
+                lm.getTaskImportanceXp(t.getImportance(), new LevelManager.XpCallback() {
+                    @Override
+                    public void onSucces(int impXp) {
+                        int totalXp = diffXp + impXp;
+                        if (totalXp > 0) {
+                            lm.addXp(totalXp, player -> {
+                                if (!isAdded()) return;
+                                requireActivity().getSupportFragmentManager()
+                                        .beginTransaction()
+                                        .replace(R.id.fragment_container, new BossFragment())
+                                        .addToBackStack(null)
+                                        .commit();
+                            });
+                            Toast.makeText(getContext(), "Urađeno! +" + totalXp + " XP", Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(getContext(), "Urađeno! (bez XP, pređena kvota)", Toast.LENGTH_LONG).show();
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(String errorMessage) {
+                        Toast.makeText(getContext(), "Greška XP importance: " + errorMessage, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+
+            @Override
+            public void onFailure(String errorMessage) {
+                Toast.makeText(getContext(), "Greška XP difficulty: " + errorMessage, Toast.LENGTH_LONG).show();
+            }
+        });
     }
 }

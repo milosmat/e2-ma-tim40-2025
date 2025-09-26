@@ -14,7 +14,10 @@ import androidx.fragment.app.Fragment;
 
 import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.manager.LevelManager;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.repository.AuthRepository;
+import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 import com.example.mobilneaplikacije.ui.auth.LoginFragment;
 import com.google.firebase.auth.*;
 import com.google.firebase.firestore.*;
@@ -22,12 +25,16 @@ import com.google.firebase.firestore.*;
 public class ProfileFragment extends Fragment {
 
     private ImageView ivAvatar;
-    private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvMissions;
+    private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvNexLvlXP , tvMissions;
     private Button btnChangePassword;
+
+    private LevelManager levelManager;
+    private AuthRepository authRepo;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
     private FirebaseUser user;
+    private PlayerRepository playerRepo;
 
     @Nullable
     @Override
@@ -40,16 +47,19 @@ public class ProfileFragment extends Fragment {
         tvLevel = view.findViewById(R.id.tvLevel);
         tvTitle = view.findViewById(R.id.tvTitle);
         tvPP = view.findViewById(R.id.tvPP);
-        tvXP = view.findViewById(R.id.tvXP);
+        //tvXP = view.findViewById(R.id.tvXP);
+        //tvNexLvlXP = view.findViewById(R.id.tvNextLvlXP);
         tvCoins = view.findViewById(R.id.tvCoins);
         tvMissions = view.findViewById(R.id.tvMissions);
-
         Button btnLogout = view.findViewById(R.id.btnLogout);
         btnChangePassword = view.findViewById(R.id.btnChangePassword);
 
+        authRepo = new AuthRepository();
+        playerRepo = new PlayerRepository();
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
         user = auth.getCurrentUser();
+        levelManager = new LevelManager();
 
         btnLogout.setOnClickListener(v -> logOut());
         btnChangePassword.setOnClickListener(v -> showChangePasswordDialog());
@@ -64,44 +74,41 @@ public class ProfileFragment extends Fragment {
     }
 
     private void loadProfileData() {
-        if (user == null) return;
+        playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
+            @Override
+            public void onSuccess(Player player) {
+                tvUsername.setText(player.getUsername());
+                tvLevel.setText("Nivo: " + player.getLevel());
+                tvTitle.setText("Titula: " + player.getTitle());
+                tvPP.setText("PP: " + player.getPp());
+                //tvXP.setText("XP: " + player.getXp());
+                //tvNexLvlXP.setText("Potreban XP za sledeci nivo: " + levelManager.getXpForNextLevel(player.getLevel()));
 
-        db.collection("users").document(user.getUid())
-                .get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        Player player = new Player(
-                                doc.getString("username"),
-                                doc.getString("avatar"),
-                                doc.getLong("level").intValue(),
-                                doc.getString("title"),
-                                doc.getLong("pp").intValue(),
-                                doc.getLong("xp").intValue(),
-                                doc.getLong("coins").intValue(),
-                                doc.getDouble("successRate")
-                        );
+                ProgressBar progressBar = getView().findViewById(R.id.progressBarXP);
+                progressBar.setMax( levelManager.getXpForNextLevel(player.getLevel()));
+                progressBar.setProgress(player.getXp());
 
-                        tvUsername.setText(player.getUsername());
-                        tvLevel.setText("Nivo: " + player.getLevel());
-                        tvTitle.setText("Titula: " + player.getTitle());
-                        tvPP.setText("PP: " + player.getPp());
-                        tvXP.setText("XP: " + player.getXp());
-                        tvCoins.setText("Novcici: " + player.getCoins());
+                tvCoins.setText("Novcici: " + player.getCoins());
 
-                        int avatarRes = getResources().getIdentifier(
-                                player.getAvatar(), "drawable", requireContext().getPackageName());
-                        if (avatarRes != 0) ivAvatar.setImageResource(avatarRes);
-                    }
-                });
+                int avatarRes = getResources().getIdentifier(
+                        player.getAvatar(), "drawable", requireContext().getPackageName());
+                if (avatarRes != 0) ivAvatar.setImageResource(avatarRes);
+            }
+            @Override
+            public void onFailure(Exception e) {
+                Toast.makeText(getContext(), "Greška: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
 
         loadCompletedMissionsCount();
     }
 
     private void loadCompletedMissionsCount() {
-        if (user == null) return;
+        FirebaseUser freshUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (freshUser == null) return;
 
         CollectionReference logsRef = db.collection("users")
-                .document(user.getUid())
+                .document(freshUser.getUid())
                 .collection("completionLogs");
 
         Query qWithXp = logsRef.whereGreaterThan("xpAwarded", 0);
@@ -148,7 +155,7 @@ public class ProfileFragment extends Fragment {
                 );
     }
     private void logOut() {
-        auth.signOut();
+        authRepo.logOut();
 
         requireActivity().getSupportFragmentManager()
                 .beginTransaction()
@@ -184,12 +191,17 @@ public class ProfileFragment extends Fragment {
                         return;
                     }
 
-                    AuthCredential credential = EmailAuthProvider.getCredential(user.getEmail(), current);
-                    user.reauthenticate(credential)
-                            .addOnSuccessListener(v -> user.updatePassword(newPas)
-                                    .addOnSuccessListener(x -> Toast.makeText(getContext(), "Lozinka promenjena", Toast.LENGTH_SHORT).show())
-                                    .addOnFailureListener(e -> Toast.makeText(getContext(), "Greska: " + e.getMessage(), Toast.LENGTH_SHORT).show()))
-                            .addOnFailureListener(e -> Toast.makeText(getContext(), "Pogresna trenutna lozinka", Toast.LENGTH_SHORT).show());
+                    authRepo.changePassword(current, newPas, new AuthRepository.AuthCallback() {
+                        @Override
+                        public void onSucces(String message) {
+                            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                        }
+
+                        @Override
+                        public void onFailure(String message) {
+                            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                        }
+                    });
                 })
                 .setNegativeButton("Otkazi", null)
                 .show();

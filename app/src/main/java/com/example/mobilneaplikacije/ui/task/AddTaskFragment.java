@@ -232,7 +232,7 @@ public class AddTaskFragment extends Fragment {
 
             repo.insertTask(t, new TaskRepository.Callback<String>() {
                 @Override public void onSuccess(String idHash) {
-                    Toast.makeText(getContext(),"Zadatak sačuvan!",Toast.LENGTH_SHORT).show();
+                    Toast.makeText(requireContext().getApplicationContext(), "Zadatak sačuvan!", Toast.LENGTH_SHORT).show();
                     requireActivity().getSupportFragmentManager().popBackStack();
                 }
                 @Override public void onError(Exception e) {

@@ -226,14 +226,14 @@ public class TaskRepository {
     }
 
     public void markOccurrenceDone(String taskId, String occId, int baseXp, String difficulty, String importance,
-                                   Callback<Integer> cb) {
+                                   Callback<Void> cb) {
         final long now = System.currentTimeMillis();
         final long threeDaysAgo = now - 3L*24*60*60*1000;
 
         final String diffN = difficulty;
         final String impN  = importance;
 
-        db.runTransaction(tr -> {
+        db.runTransaction((Transaction.Function<Void>) tr -> {
                     DocumentReference occRef = occCol(taskId).document(occId);
                     DocumentSnapshot occ = tr.get(occRef);
                     if (!occ.exists()) throw new IllegalStateException("OCC_NOT_FOUND");
@@ -273,17 +273,12 @@ public class TaskRepository {
                     if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2)allowed = false;
                     if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
 
-                    int award = allowed ? baseXp : 0;
-
-                    tr.update(occRef, "status", "DONE", "xpAwarded", award);
-
                     Map<String, Object> log = new HashMap<>();
                     log.put("taskId", taskId);
                     log.put("occurrenceId", occId);
                     log.put("completedAt", now);
                     log.put("difficulty", difficulty);
                     log.put("importance", importance);
-                    log.put("xpAwarded", award);
                     tr.set(logsCol().document(), log);
 
                     Map<String, Object> dayUpd = new HashMap<>();
@@ -305,23 +300,20 @@ public class TaskRepository {
                         mUpd.put("special", special + 1);
                         tr.set(mRef, mUpd, SetOptions.merge());
                     }
-
-                    if (award > 0) tr.update(userDoc(), "xp", FieldValue.increment(award));
-
-                    return award;
+                    return null;
                 }).addOnSuccessListener(cb::onSuccess)
                 .addOnFailureListener(cb::onError);
     }
 
     public void markSingleDone(String taskId, int baseXp, String difficulty, String importance,
-                               Callback<Integer> cb) {
+                               Callback<Void> cb) {
         final long now = System.currentTimeMillis();
         final long threeDaysAgo = now - 3L*24*60*60*1000;
 
         final String diffN = difficulty;
         final String impN  = importance;
 
-        db.runTransaction(tr -> {
+        db.runTransaction((Transaction.Function<Void>) tr -> {
                     DocumentReference tRef = tasksCol().document(taskId);
                     DocumentSnapshot d = tr.get(tRef);
                     if (!d.exists()) throw new IllegalStateException("TASK_NOT_FOUND");
@@ -362,7 +354,6 @@ public class TaskRepository {
                     if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2) allowed = false;
                     if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
 
-                    int award = allowed ? baseXp : 0;
 
                     tr.update(tRef, "status", "DONE", "updatedAt", FieldValue.serverTimestamp());
 
@@ -372,7 +363,6 @@ public class TaskRepository {
                     log.put("completedAt", now);
                     log.put("difficulty", difficulty);
                     log.put("importance", importance);
-                    log.put("xpAwarded", award);
                     tr.set(logsCol().document(), log);
 
                     Map<String, Object> dayUpd = new HashMap<>();
@@ -395,9 +385,7 @@ public class TaskRepository {
                         tr.set(mRef, mUpd, SetOptions.merge());
                     }
 
-                    if (award > 0) tr.update(userDoc(), "xp", FieldValue.increment(award));
-
-                    return award;
+                    return null;
                 }).addOnSuccessListener(cb::onSuccess)
                 .addOnFailureListener(cb::onError);
     }
@@ -520,5 +508,28 @@ public class TaskRepository {
         if (!any) { cb.onSuccess(null); return; }
         b.commit().addOnSuccessListener(v -> cb.onSuccess(null))
                 .addOnFailureListener(cb::onError);
+    }
+
+    public void calculateSuccessRate(Callback<Double> cb) {
+        getAllTasks(new Callback<List<Task>>() {
+            @Override
+            public void onSuccess(List<Task> tasks) {
+                int done = 0;
+                int total = 0;
+                for (Task t : tasks) {
+                    String st = t.getStatus();
+                    if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue; // ne računamo
+                    total++;
+                    if ("DONE".equals(st)) done++;
+                }
+                double rate = total > 0 ? (done * 100.0 / total) : 0.0;
+                cb.onSuccess(rate);
+            }
+
+            @Override
+            public void onError(Exception e) {
+                cb.onError(e);
+            }
+        });
     }
 }
