@@ -32,7 +32,9 @@ import java.util.Random;
 public class BossRewardFragment extends Fragment implements SensorEventListener {
 
     private static final String ARG_COINS = "coins";
-    private static final String ARG_EQUIPMENT = "equipment";
+    private static final String ARG_HAS_EQUIP = "hasEquipment";
+    private static final String ARG_EQ_NAME = "eqName";
+    private static final String ARG_EQ_TYPE = "eqType";
 
     private SensorManager sensorManager;
     private float accelCurrent;
@@ -44,11 +46,14 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
     private TextView tvCoins;
     private Button btnContinue;
     private LinearLayout llRewards;
-    public static BossRewardFragment newInstance(int coins, boolean hasEquipment) {
+    public static BossRewardFragment newInstance(int coins, boolean hasEquipment,
+                                                 @Nullable String eqName, @Nullable String eqType) {
         BossRewardFragment fragment = new BossRewardFragment();
         Bundle args = new Bundle();
         args.putInt(ARG_COINS, coins);
-        args.putBoolean(ARG_EQUIPMENT, hasEquipment);
+        args.putBoolean(ARG_HAS_EQUIP, hasEquipment);
+        if (eqName != null) args.putString(ARG_EQ_NAME, eqName);
+        if (eqType != null) args.putString(ARG_EQ_TYPE, eqType);
         fragment.setArguments(args);
         return fragment;
     }
@@ -82,9 +87,9 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
 
         if (getArguments() != null) {
             int coins = getArguments().getInt(ARG_COINS, 0);
-            boolean hasEquipment = getArguments().getBoolean(ARG_EQUIPMENT, false);
-
-            //player.setXp(player.getXp() + 100); // test XP ne treba za finis
+            boolean hasEquipment = getArguments().getBoolean(ARG_HAS_EQUIP, false);
+            String eqName = getArguments().getString(ARG_EQ_NAME, null);
+            String eqType = getArguments().getString(ARG_EQ_TYPE, null); // "WEAPON" / "CLOTHES"
 
             // 🔹 Prikaži coinse
             TextView coinView = new TextView(requireContext());
@@ -93,22 +98,10 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
             coinView.setTextSize(20f);
             llRewards.addView(coinView);
 
-            // 🔹 Ako je pala oprema
-            if (hasEquipment) {
-                Random rand = new Random();
-                Equipment drop;
-                int iconRes;
-                if (rand.nextInt(100) < 5) {
-                    drop = new Equipment("Mač (+5% PP)", Equipment.Type.WEAPON,
-                            Equipment.Effect.INCREASE_PP, 0.05, -1, false);
-                    iconRes = R.drawable.ic_sword;
-                } else {
-                    drop = new Equipment("Rukavice (+10% PP)", Equipment.Type.CLOTHES,
-                            Equipment.Effect.INCREASE_PP, 0.1, 2, false);
-                    iconRes = R.drawable.ic_gloves;
-                }
+            // 🔹 Ako je pala oprema iz back-end transakcije, prikaži je (bez lokalne lutrije)
+            if (hasEquipment && eqName != null && eqType != null) {
+                int iconRes = "WEAPON".equals(eqType) ? R.drawable.ic_sword : R.drawable.ic_gloves;
 
-                // UI prikaz opreme
                 LinearLayout itemRow = new LinearLayout(requireContext());
                 itemRow.setOrientation(LinearLayout.HORIZONTAL);
                 itemRow.setGravity(Gravity.CENTER);
@@ -120,20 +113,17 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
                 iv.setLayoutParams(lp);
 
                 TextView tv = new TextView(requireContext());
-                tv.setText("Nova oprema: " + drop.getName());
+                tv.setText("Nova oprema: " + eqName);
                 tv.setTextColor(getResources().getColor(android.R.color.white));
                 tv.setTextSize(18f);
 
                 itemRow.addView(iv);
                 itemRow.addView(tv);
-
                 llRewards.addView(itemRow);
             }
-
         }
 
-        // Prikaži Continue posle 5 sekundi
-        new Handler().postDelayed(() -> btnContinue.setVisibility(View.VISIBLE), 5000);
+        new Handler().postDelayed(() -> btnContinue.setVisibility(View.VISIBLE), 3000);
 
         btnContinue.setOnClickListener(v -> {
             requireActivity().getSupportFragmentManager()

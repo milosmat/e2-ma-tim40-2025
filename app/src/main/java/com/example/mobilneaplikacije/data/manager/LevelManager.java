@@ -4,13 +4,17 @@ import androidx.annotation.Nullable;
 
 import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.repository.PlayerRepository;
+import com.example.mobilneaplikacije.data.repository.TaskRepository;
 
 public class LevelManager {
 
     private PlayerRepository playerRepo;
-
+    private final TaskRepository taskRepo;
+    private final BattleManager battleManager;
     public LevelManager(){
         playerRepo = new PlayerRepository();
+        taskRepo  = new TaskRepository();
+        battleManager = new BattleManager();
     }
     public static int getXpForNextLevel(int level) {
         if (level == 1) return 200;
@@ -33,15 +37,36 @@ public class LevelManager {
             default: return "Legenda";
         }
     }
-    public boolean checkLevelUp(Player player) {
-        int nextLevelXp = getXpForNextLevel(player.getLevel());
-        if (player.getXp() >= nextLevelXp) {
-            player.setLevel(player.getLevel() + 1);
-            player.setPp(getPpForLevel(player.getLevel()));
-            player.setTitle(getTitleForLevel(player.getLevel()));
-            return true;
+    private boolean checkLevelUpAndFinalizeStage(Player p) {
+        boolean leveled = false;
+        while (p.getXp() >= getXpForNextLevel(p.getLevel())) {
+            long now = System.currentTimeMillis();
+            long stageStart = p.getLastLevelUpAt() > 0 ? p.getLastLevelUpAt() : p.getCreatedAt();
+
+            taskRepo.calculateSuccessRate(stageStart, now, new TaskRepository.Callback<Double>() {
+                @Override public void onSuccess(Double successPercent) {
+                    int pct = (successPercent == null) ? 50 : (int) Math.round(successPercent);
+                    battleManager.prepareBossAfterLevelUp(pct, now, new BattleManager.Callback<Void>() {
+                        @Override public void onSuccess(Void v) { }
+                        @Override public void onError(Exception e) { }
+                    });
+                }
+                @Override public void onError(Exception e) {
+                    battleManager.prepareBossAfterLevelUp(50, now, new BattleManager.Callback<Void>() {
+                        @Override public void onSuccess(Void v) { }
+                        @Override public void onError(Exception ex) { }
+                    });
+                }
+            });
+
+            p.setLevel(p.getLevel() + 1);
+            p.setPp(getPpForLevel(p.getLevel()));
+            p.setTitle(getTitleForLevel(p.getLevel()));
+            p.setLastLevelUpAt(now);
+
+            leveled = true;
         }
-        return false;
+        return leveled;
     }
     public interface LevelUpCallback {
         void onLevelUp(Player player);
@@ -91,10 +116,10 @@ public class LevelManager {
                     case "NORMALAN":
                         xp = 1;
                         break;
-                    case "VAŽAN":
+                    case "VAZAN":
                         xp = 3;
                         break;
-                    case "EKSTREMNO_VAŽAN":
+                    case "EKSTREMNO_VAZAN":
                         xp = 10;
                         break;
                     case "SPECIJALAN":
@@ -118,20 +143,17 @@ public class LevelManager {
         playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
             @Override
             public void onSuccess(Player currentPlayer) {
-                int newXp = currentPlayer.getXp() + deltaXp;
-                currentPlayer.setXp(newXp);
+                currentPlayer.setXp(currentPlayer.getXp() + deltaXp);
 
-                boolean leveledUp = checkLevelUp(currentPlayer);
+                boolean leveledUp = checkLevelUpAndFinalizeStage(currentPlayer);
                 playerRepo.syncWithDatabase();
 
-                if (leveledUp && callback != null) {
-                    callback.onLevelUp(currentPlayer);
-                }
+                if (leveledUp && callback != null) callback.onLevelUp(currentPlayer);
             }
-            @Override
-            public void onFailure(Exception e) {}
+            @Override public void onFailure(Exception e) {}
         });
     }
+
     public interface XpCallback {
         void onSucces(int xp);
         void onFailure(String errorMessage);

@@ -1,21 +1,19 @@
 package com.example.mobilneaplikacije.ui.boss;
 
+import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import android.content.Context;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -24,31 +22,43 @@ import androidx.fragment.app.Fragment;
 import com.airbnb.lottie.LottieAnimationView;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.manager.BattleManager;
-import com.example.mobilneaplikacije.data.manager.LevelManager;
-import com.example.mobilneaplikacije.data.model.Boss;
-import com.example.mobilneaplikacije.data.model.Equipment;
-import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.model.dto.AttackResult;
+import com.example.mobilneaplikacije.data.model.dto.BattleState;
+import com.example.mobilneaplikacije.data.model.dto.VictoryResult;
 import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.google.firebase.firestore.ListenerRegistration;
 
 public class BossFragment extends Fragment implements SensorEventListener {
-    private SensorManager sensorManager;
-    private float accelCurrent;
-    private float accelLast;
-    private float shakeThreshold = 12f; // koliko jako treba protresti
+
     private ImageView ivBoss;
     private ProgressBar pbBossHp, pbPlayerPp;
+    private TextView tvBossHpValue, tvPlayerPpValue;
     private TextView tvSuccessRate, tvAttempts, tvBattleLog, tvCoins;
     private Button btnAttack;
     private LottieAnimationView lavChest;
     private View llRewards;
-
+    private ListenerRegistration battleStateReg;
     private BattleManager battleManager;
-    private Player player;
-    private Boss boss;
+    private PlayerRepository playerRepo;
+    private TaskRepository taskRepo;
+
+    private SensorManager sensorManager;
+    private Sensor accelerometer;
+    private static final float SHAKE_THRESHOLD = 12f;
+    private long lastShakeMs = 0L;
+
+    private long playerPP = 0L;
+    private int hitChance = 0;
+    private int bossMaxHpUi = 0;
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        return inflater.inflate(R.layout.fragment_boss, container, false);
+    }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
@@ -57,115 +67,137 @@ public class BossFragment extends Fragment implements SensorEventListener {
         ivBoss = view.findViewById(R.id.ivBoss);
         pbBossHp = view.findViewById(R.id.pbBossHp);
         pbPlayerPp = view.findViewById(R.id.pbPlayerPp);
+        tvBossHpValue = view.findViewById(R.id.tvBossHpValue);
+        tvPlayerPpValue = view.findViewById(R.id.tvPlayerPpValue);
         tvSuccessRate = view.findViewById(R.id.tvSuccessRate);
         tvBattleLog = view.findViewById(R.id.tvBattleLog);
         tvCoins = view.findViewById(R.id.tvCoins);
         btnAttack = view.findViewById(R.id.btnAttack);
         lavChest = view.findViewById(R.id.lavChest);
         llRewards = view.findViewById(R.id.llRewards);
+        tvAttempts = view.findViewById(R.id.tvAttempts);
 
         sensorManager = (SensorManager) requireActivity().getSystemService(Context.SENSOR_SERVICE);
-        accelCurrent = SensorManager.GRAVITY_EARTH;
-        accelLast = SensorManager.GRAVITY_EARTH;
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 
-        PlayerRepository playerRepo = new PlayerRepository();
-        TaskRepository taskRepo = new TaskRepository(requireContext());
+        playerRepo = new PlayerRepository();
+        taskRepo = new TaskRepository();
+        battleManager = new BattleManager();
 
-        playerRepo.refreshSuccessRate(taskRepo, new PlayerRepository.PlayerCallback() {
-            @Override
-            public void onSuccess(Player p) {
-                player = p;
-                boss = new Boss(player.getLevel(), 200, 200);
-                battleManager = new BattleManager(player, boss, new ArrayList<>());
-                initUi();
+        battleManager.loadOrInit(0L, new BattleManager.Callback<BattleState>() {
+            @Override public void onSuccess(@Nullable BattleState state) {
+                if (state == null) return;
+
+                bindStateToUi(state);
+
+                playerRepo.getCurrentPP(new PlayerRepository.LongCallback() {
+                    @Override public void onResult(long v) {
+                        playerPP = v;
+                        pbPlayerPp.setMax((int) Math.max(1, v));
+                        pbPlayerPp.setProgress((int) v);
+                        tvPlayerPpValue.setText(v + " PP");
+                    }
+                    @Override public void onError(Exception e) {
+                        playerPP = 0L;
+                        pbPlayerPp.setMax(1);
+                        pbPlayerPp.setProgress(0);
+                    }
+                });
+
+                if (battleStateReg != null) battleStateReg.remove();
+                battleStateReg = battleManager.addStateListener(new BattleManager.Callback<BattleState>() {
+                    @Override public void onSuccess(@Nullable BattleState s) { bindStateToUi(s); }
+                    @Override public void onError(Exception e) {  }
+                });
+
+                btnAttack.setOnClickListener(v -> doAttack());
             }
-
-            @Override
-            public void onFailure(Exception e) {
+            @Override public void onError(Exception e) {
                 Toast.makeText(requireContext(), "Greška: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
     }
 
-    private void initUi() {
-        pbBossHp.setMax(boss.getMaxHp());
-        pbBossHp.setProgress(boss.getHp());
-
-        pbPlayerPp.setMax(player.getPp());
-        pbPlayerPp.setProgress(player.getPp());
-
-        tvSuccessRate.setText("Šansa za pogodak: " + player.getSuccessRate() + "%");
-        tvAttempts.setText("Pokušaji: " + battleManager.getAttemptsLeft() + "/" + battleManager.getMaxAttempts());
+    @Override public void onDestroyView() {
+        super.onDestroyView();
+        if (battleStateReg != null) {
+            battleStateReg.remove();
+            battleStateReg = null;
+        }
     }
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            float x = event.values[0];
-            float y = event.values[1];
-            float z = event.values[2];
+    private void bindStateToUi(BattleState state) {
+        if (state == null || getView() == null) return;
+        bossMaxHpUi = (int) state.bossMaxHp;
 
-            accelLast = accelCurrent;
-            accelCurrent = (float) Math.sqrt((x * x + y * y + z * z));
-            float delta = accelCurrent - accelLast;
+        pbBossHp.setMax(bossMaxHpUi);
+        pbBossHp.setProgress((int) state.bossHp);
+        tvBossHpValue.setText(state.bossHp + " / " + state.bossMaxHp + " HP");
 
-            if (delta > shakeThreshold) {
-                // Pokreni napad
-                handleAttack();
+        tvAttempts.setText("Pokušaji: " + state.attemptsLeft + "/5");
+
+        hitChance = state.hitChance;
+        tvSuccessRate.setText("Šansa za pogodak: " + hitChance + "%");
+
+        long baseCoins = BattleManager.coinsForIndex(state.currentBossIndex);
+        long previewCoins = state.halvedReward ? Math.round(baseCoins / 2.0) : baseCoins;
+        int gearPct = state.halvedReward ? 10 : 20;
+        tvCoins.setText("Potencijalno: " + previewCoins + " novčića • Oprema: " + gearPct + "%");
+    }
+    private void doAttack() {
+        btnAttack.setEnabled(false);
+        battleManager.performAttack(hitChance, playerPP, new BattleManager.Callback<AttackResult>() {
+            @Override
+            public void onSuccess(@Nullable AttackResult ar) {
+                btnAttack.setEnabled(true);
+                if (ar == null) return;
+
+                if (ar.hit) {
+                    showBossHit();
+                    tvBattleLog.setText(getString(R.string.boss_hit, ar.damageApplied));
+                } else {
+                    showBossAttack();
+                    tvBattleLog.setText(getString(R.string.boss_miss));
+                }
+
+                pbBossHp.setProgress((int) ar.bossHpAfter);
+                tvBossHpValue.setText(ar.bossHpAfter + " / " + bossMaxHpUi + " HP");
+                tvAttempts.setText("Pokušaji: " + ar.attemptsLeftAfter + "/5");
+
+                if (ar.bossDefeated) {
+                    battleManager.resolveVictoryAndAdvance(new BattleManager.Callback<VictoryResult>() {
+                        @Override public void onSuccess(@Nullable VictoryResult vr) {
+                            unregisterShake();
+                            long coins = (vr == null) ? 0 : vr.coinsAwarded;
+
+                            getParentFragmentManager()
+                                    .beginTransaction()
+                                    .replace(R.id.fragment_container,
+                                            BossRewardFragment.newInstance(
+                                                    (int) coins,
+                                                    vr != null && vr.equipmentDropped,
+                                                    vr != null ? vr.equipmentName : null,
+                                                    vr != null ? vr.equipmentType : null
+                                            )
+                                    )
+                                    .commit();
+                        }
+                        @Override public void onError(Exception e) {
+                            Toast.makeText(requireContext(), "Greška: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } else if (ar.fightEnded) {
+                    Toast.makeText(requireContext(),
+                            "Okršaj završen. Nastavljaš nakon sledećeg pređenog nivoa.",
+                            Toast.LENGTH_LONG).show();
+                }
             }
-        }
-    }
 
-    @Override
-    public void onAttach(@NonNull Context context) {
-        super.onAttach(context);
-        sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
-    }
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {}
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (sensorManager != null) {
-            Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            if (accelerometer != null) {
-                sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+            @Override
+            public void onError(Exception e) {
+                btnAttack.setEnabled(true);
+                Toast.makeText(requireContext(), "Greška: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
-        }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        if (sensorManager != null) {
-            sensorManager.unregisterListener(this);
-        }
-    }
-    private void handleAttack() {
-        if (battleManager == null || boss == null || player == null) return;
-        String result = battleManager.attack();
-
-        if (result.contains("Uspešan napad")) {
-            showBossHit();
-        } else if (result.contains("Promašaj")) {
-            showBossAttack();
-        } else {
-            showBossIdle();
-        }
-
-        // Update UI
-        pbBossHp.setProgress(boss.getHp());
-        tvAttempts.setText("Pokušaji: " + battleManager.getAttemptsLeft() + "/" + battleManager.getMaxAttempts());
-        tvBattleLog.setText(result);
-
-        if (battleManager.isFinished()) {
-            sensorManager.unregisterListener(this);
-            getParentFragmentManager()
-                    .beginTransaction()
-                    .replace(R.id.fragment_container,
-                            BossRewardFragment.newInstance(battleManager.getFinalCoins(), battleManager.hasEquipment()))
-                    .commit();
-        }
+        });
     }
 
     private void showBossIdle() {
@@ -174,11 +206,49 @@ public class BossFragment extends Fragment implements SensorEventListener {
 
     private void showBossHit() {
         ivBoss.setImageResource(R.drawable.boss_hit);
-        ivBoss.postDelayed(() -> ivBoss.setImageResource(R.drawable.boss_idle), 500);
+        ivBoss.postDelayed(this::showBossIdle, 500);
     }
 
     private void showBossAttack() {
         ivBoss.setImageResource(R.drawable.boss_attack);
-        ivBoss.postDelayed(() -> ivBoss.setImageResource(R.drawable.boss_idle), 500);
+        ivBoss.postDelayed(this::showBossIdle, 500);
     }
+
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        registerShake();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        unregisterShake();
+    }
+
+    private void registerShake() {
+        if (sensorManager != null && accelerometer != null) {
+            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+        }
+    }
+
+    private void unregisterShake() {
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
+    }
+
+    @Override public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER) return;
+        float x = event.values[0], y = event.values[1], z = event.values[2];
+        double magnitude = Math.sqrt(x*x + y*y + z*z) - SensorManager.GRAVITY_EARTH;
+        long now = System.currentTimeMillis();
+        if (magnitude > SHAKE_THRESHOLD && (now - lastShakeMs) > 600) {
+            lastShakeMs = now;
+            doAttack();
+        }
+    }
+
+    @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 }
