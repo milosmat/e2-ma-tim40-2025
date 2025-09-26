@@ -16,6 +16,7 @@ import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.repository.AuthRepository;
+import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 import com.example.mobilneaplikacije.ui.auth.LoginFragment;
 import com.google.firebase.auth.*;
 import com.google.firebase.firestore.*;
@@ -31,6 +32,7 @@ public class ProfileFragment extends Fragment {
     private FirebaseAuth auth;
     private FirebaseFirestore db;
     private FirebaseUser user;
+    private PlayerRepository playerRepo;
 
     @Nullable
     @Override
@@ -50,6 +52,7 @@ public class ProfileFragment extends Fragment {
         btnChangePassword = view.findViewById(R.id.btnChangePassword);
 
         authRepo = new AuthRepository();
+        playerRepo = new PlayerRepository();
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
         user = auth.getCurrentUser();
@@ -67,35 +70,25 @@ public class ProfileFragment extends Fragment {
     }
 
     private void loadProfileData() {
-        if (user == null) return;
+        playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
+            @Override
+            public void onSuccess(Player player) {
+                tvUsername.setText(player.getUsername());
+                tvLevel.setText("Nivo: " + player.getLevel());
+                tvTitle.setText("Titula: " + player.getTitle());
+                tvPP.setText("PP: " + player.getPp());
+                tvXP.setText("XP: " + player.getXp());
+                tvCoins.setText("Novcici: " + player.getCoins());
 
-        db.collection("users").document(user.getUid())
-                .get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        Player player = new Player(
-                                doc.getString("username"),
-                                doc.getString("avatar"),
-                                doc.getLong("level").intValue(),
-                                doc.getString("title"),
-                                doc.getLong("pp").intValue(),
-                                doc.getLong("xp").intValue(),
-                                doc.getLong("coins").intValue(),
-                                doc.getDouble("successRate")
-                        );
-
-                        tvUsername.setText(player.getUsername());
-                        tvLevel.setText("Nivo: " + player.getLevel());
-                        tvTitle.setText("Titula: " + player.getTitle());
-                        tvPP.setText("PP: " + player.getPp());
-                        tvXP.setText("XP: " + player.getXp());
-                        tvCoins.setText("Novcici: " + player.getCoins());
-
-                        int avatarRes = getResources().getIdentifier(
-                                player.getAvatar(), "drawable", requireContext().getPackageName());
-                        if (avatarRes != 0) ivAvatar.setImageResource(avatarRes);
-                    }
-                });
+                int avatarRes = getResources().getIdentifier(
+                        player.getAvatar(), "drawable", requireContext().getPackageName());
+                if (avatarRes != 0) ivAvatar.setImageResource(avatarRes);
+            }
+            @Override
+            public void onFailure(Exception e) {
+                Toast.makeText(getContext(), "Greška: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
 
         loadCompletedMissionsCount();
     }

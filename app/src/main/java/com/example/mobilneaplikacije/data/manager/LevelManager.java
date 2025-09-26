@@ -1,37 +1,38 @@
 package com.example.mobilneaplikacije.data.manager;
 
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 
 public class LevelManager {
 
-    // XP potreban za level
-    public static int getXpForLevel(int level) {
-        if (level == 1) return 200; // prvi prag
-        int prevXp = getXpForLevel(level - 1);
+    private PlayerRepository playerRepo;
+
+    public LevelManager(){
+        playerRepo = new PlayerRepository();
+    }
+    public static int getXpForNextLevel(int level) {
+        if (level == 1) return 200;
+        int prevXp = getXpForNextLevel(level - 1);
         int raw = prevXp * 2 + prevXp / 2;
-        return ((raw + 99) / 100) * 100; // zaokruži na prvu stotinu
+        return ((raw + 99) / 100) * 100;
     }
 
-    // PP dobijen na ovom nivou
     public static int getPpForLevel(int level) {
         if (level == 1) return 40;
         int prevPp = getPpForLevel(level - 1);
         return Math.round(prevPp + (prevPp * 0.75f));
     }
 
-    // Titule
     public static String getTitleForLevel(int level) {
         switch (level) {
-            case 1: return "Početnik";
-            case 2: return "Učenik";
+            case 1: return "Pocetnik";
+            case 2: return "Ucenik";
             case 3: return "Majstor";
             default: return "Legenda";
         }
     }
-
-    // Proveri da li je igrač prešao nivo
-    public static boolean checkLevelUp(Player player) {
-        int nextLevelXp = getXpForLevel(player.getLevel());
+    public boolean checkLevelUp(Player player) {
+        int nextLevelXp = getXpForNextLevel(player.getLevel());
         if (player.getXp() >= nextLevelXp) {
             player.setLevel(player.getLevel() + 1);
             player.setPp(getPpForLevel(player.getLevel()));
@@ -40,4 +41,92 @@ public class LevelManager {
         }
         return false;
     }
+
+    public void getTaskDifficultyXp(String difficulty, final XpCallback callback) {
+        playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
+            @Override
+            public void onSuccess(Player player) {
+                int level = player.getLevel();
+                int xp = 0;
+                switch (difficulty) {
+                    case "VEOMA_LAK":
+                        xp = 1;
+                        break;
+                    case "LAK":
+                        xp = 3;
+                        break;
+                    case "TEZAK":
+                        xp = 7;
+                        break;
+                    case "EKSTREMNO_TEZAK":
+                        xp = 20;
+                        break;
+                    default:
+                        xp = 0;
+                }
+
+                for (int i = 2; i <= level; i++) {
+                    xp += Math.round(xp / 2.0f);
+                }
+                callback.onSucces(xp);
+            }
+            @Override
+            public void onFailure(Exception e) {
+                callback.onFailure(e.getMessage());
+            }
+        });
+    }
+
+    public void getTaskImportanceXp(String importance, final XpCallback callback) {
+        playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
+            @Override
+            public void onSuccess(Player player) {
+                int level = player.getLevel();
+                int xp = 0;
+                switch (importance) {
+                    case "NORMALAN":
+                        xp = 1;
+                        break;
+                    case "VAŽAN":
+                        xp = 3;
+                        break;
+                    case "EKSTREMNO_VAŽAN":
+                        xp = 10;
+                        break;
+                    case "SPECIJALAN":
+                        xp = 100;
+                        break;
+                    default:
+                        xp = 0;
+                }
+                for (int i = 2; i <= level; i++) {
+                    xp += Math.round(xp / 2.0f);
+                }
+                callback.onSucces(xp);
+            }
+            @Override
+            public void onFailure(Exception e) {
+                callback.onFailure(e.getMessage());
+            }
+        });
+    }
+    public void addXp(int deltaXp) {
+        playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
+            @Override
+            public void onSuccess(Player currentPlayer) {
+                int newXp = currentPlayer.getXp() + deltaXp;
+                currentPlayer.setXp(newXp);
+                checkLevelUp(currentPlayer);
+                playerRepo.syncWithDatabase();
+            }
+            @Override
+            public void onFailure(Exception e) {
+            }
+        });
+    }
+    public interface XpCallback {
+        void onSucces(int xp);
+        void onFailure(String errorMessage);
+    }
+
 }
