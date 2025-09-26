@@ -1,28 +1,27 @@
 package com.example.mobilneaplikacije.data.model;
 
 public class Boss {
-    private int id;          // jedinstveni ID bossa (nivo)
-    private int level;       // nivo bossa
-    private int hp;          // trenutno HP
-    private int maxHp;       // maksimalni HP
-    private int coinsReward; // nagrada u novčićima
+    private int id;
+    private int level;
+    private int hp;
+    private int maxHp;
+    private int coinsReward;
 
     public Boss(int level, int prevHp, int prevCoins) {
         this.level = level;
-        this.id = level; // za sada ID = level
+        this.id = level;
 
         if (level == 1) {
             this.hp = 200;
             this.maxHp = 200;
             this.coinsReward = 200;
         } else {
-            this.hp = prevHp * 2 + prevHp / 2;       // HP scaling
+            this.hp = prevHp * 2 + prevHp / 2;
             this.maxHp = this.hp;
-            this.coinsReward = (int) Math.round(prevCoins * 1.2); // +20% coins
+            this.coinsReward = (int) Math.round(prevCoins * 1.2);
         }
     }
 
-    // --- Getteri & Setteri ---
     public int getId() {
         return id;
     }

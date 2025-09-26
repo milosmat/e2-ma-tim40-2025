@@ -75,12 +75,6 @@ public class MainActivity extends AppCompatActivity {
                         .replace(R.id.fragment_container, new CategoryListFragment())
                         .commit();
                 return true;
-            } else if (id == R.id.nav_boss) {
-                getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragment_container, new BossFragment())
-                        .commit();
-                return true;
             }
             return false;
         });

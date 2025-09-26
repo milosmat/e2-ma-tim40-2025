@@ -50,7 +50,7 @@ public class TaskCalendarFragment extends Fragment {
         });
         recyclerDayTasks.setAdapter(dayAdapter);
 
-        taskRepo = new TaskRepository(requireContext());
+        taskRepo = new TaskRepository();
 
         new CategoryRepository(requireContext()).getAllCategories(new CategoryRepository.Callback<List<Category>>() {
             @Override public void onSuccess(List<Category> data) {

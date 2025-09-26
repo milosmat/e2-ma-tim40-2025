@@ -20,4 +20,10 @@
     <string name="izaberi_avatar">Izaberi avatar:</string>
     <string name="ponovi_lozinku">Ponovi lozinku</string>
     <string name="registruj_se">Registruj se</string>
+    <string name="attack">Napadni</string>
+    <string name="boss_hit">Pogodak! −%1$d HP</string>
+    <string name="boss_miss">Promašaj!</string>
+    <string name="boss_image">Boss</string>
+    <string name="coin_desc">Novčić</string>
+    <string name="chest_desc">Kovčeg sa nagradama</string>
 </resources>

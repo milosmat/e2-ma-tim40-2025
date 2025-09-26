@@ -1,15 +1,20 @@
 package com.example.mobilneaplikacije.data.model;
 
+import java.sql.Time;
+import java.sql.Timestamp;
+
 public class Player {
     private String username;
-    private String avatar;       // path ili ime fajla avatara
-    private int level;           // trenutni nivo
-    private String title;        // titula (npr. “Početnik”)
-    private int pp;              // Power Points
-    private int xp;              // Experience Points
-    private int coins;           // broj novčića
-    private double successRate;  // uspešnost u %
-
+    private String avatar;
+    private int level;
+    private String title;
+    private int pp;
+    private int xp;
+    private int coins;
+    private double successRate;
+    private long createdAt;
+    private long lastLevelUpAt;
+    public Player() {}
     public Player(String username, String avatar, int level, String title,
                   int pp, int xp, int coins, double successRate) {
         this.username = username;
@@ -20,6 +25,8 @@ public class Player {
         this.xp = xp;
         this.coins = coins;
         this.successRate = successRate;
+        this.createdAt = System.currentTimeMillis();
+        this.lastLevelUpAt = 0L;
     }
 
     // --- getteri i setteri ---
@@ -47,9 +54,15 @@ public class Player {
     public double getSuccessRate() { return successRate; }
     public void setSuccessRate(double successRate) { this.successRate = successRate; }
 
-    // Hook za kasniju opremu
-    public void applyEquipmentEffects() {
-        // TODO kad se implementira oprema
+    public long getLastLevelUpAt() {
+        return lastLevelUpAt;
     }
 
+    public long getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setLastLevelUpAt(long lastLevelUpAt) {
+        this.lastLevelUpAt = lastLevelUpAt;
+    }
 }

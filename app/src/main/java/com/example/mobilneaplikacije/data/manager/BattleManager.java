@@ -1,136 +1,280 @@
 package com.example.mobilneaplikacije.data.manager;
 
-import com.example.mobilneaplikacije.data.model.Boss;
-import com.example.mobilneaplikacije.data.model.Equipment;
-import com.example.mobilneaplikacije.data.model.Player;
-
-import java.util.List;
-import java.util.Random;
+import androidx.annotation.Nullable;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.*;
+import java.util.HashMap;
+import java.util.Map;
+import com.example.mobilneaplikacije.data.model.dto.AttackResult;
+import com.example.mobilneaplikacije.data.model.dto.VictoryResult;
+import com.example.mobilneaplikacije.data.model.dto.BattleState;
 
 public class BattleManager {
-    private Player player;
-    private Boss boss;
-    private int attemptsLeft = 5;
-    private int maxAttempts = 5;   // default
-    private double coinsMultiplier = 1.0; // za oružje (luk i strela)
 
-    private boolean finished = false;
-
-    // nova polja za nagrade
-    private int finalCoins = 0;
-    private boolean equipmentDropped = false;
-    private boolean weapon = false;
-
-    public BattleManager(Player player, Boss boss, List<Equipment> activeItems) {
-        this.player = player;
-        this.boss = boss;
-        applyEquipment(player, activeItems);
-        this.attemptsLeft = maxAttempts;
+    public interface Callback<T> {
+        void onSuccess(@Nullable T data);
+        void onError(Exception e);
     }
 
+    private final FirebaseFirestore db;
+    private final String uid;
 
-    public String attack() {
-        if (finished) return "Borba je završena!";
-        if (attemptsLeft <= 0) return "Nema više napada!";
-
-        Random rand = new Random();
-        int roll = rand.nextInt(101); // 0-100
-        String result;
-
-        if (roll < player.getSuccessRate()) {
-            boss.takeDamage(player.getPp());
-            result = "Uspešan napad! Bosu je oduzeto " + player.getPp() + " HP.";
-        } else {
-            result = "Promašaj!";
-        }
-
-        attemptsLeft--;
-
-        if (boss.isDefeated() || attemptsLeft == 0) {
-            finished = true;
-            result += "\n" + resolveRewards();
-        }
-
-        return result;
+    public BattleManager() {
+        this.db = FirebaseFirestore.getInstance();
+        this.uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
     }
 
-    private String resolveRewards() {
-        Random rand = new Random();
+    private DocumentReference stateDoc() {
+        return db.collection("users").document(uid).collection("battle").document("current");
+    }
 
-        if (boss.isDefeated()) {
-            finalCoins = (int) (boss.getCoinsReward() * coinsMultiplier);
+    public static long bossHpForIndex(int idx) {
+        double hp = 200.0;
+        for (int i=2;i<=idx;i++) hp *= 2.5;
+        return Math.round(hp);
+    }
 
-            // 20% šanse za opremu
-            if (rand.nextInt(100) < 20) {
-                equipmentDropped = true;
-                // 5% šansa za weapon, 95% za odeću
-                weapon = rand.nextInt(100) < 5;
+    public static long coinsForIndex(int idx) {
+        return Math.round(200.0 * Math.pow(1.2, idx - 1));
+    }
+
+    public void loadOrInit(long stageStartMillis, Callback<BattleState> cb) {
+        stateDoc().get().addOnSuccessListener(d -> {
+            if (!d.exists()) {
+                BattleState s = new BattleState();
+                s.currentBossIndex = 1;
+                s.bossMaxHp = bossHpForIndex(1);
+                s.bossHp = s.bossMaxHp;
+                s.attemptsLeft = 5;
+                s.halvedReward = false;
+                s.carryOverPending = false;
+                s.lastStageStart = (stageStartMillis == 0L) ? System.currentTimeMillis() : stageStartMillis;
+                save(s, new Callback<Void>() {
+                    @Override public void onSuccess(@Nullable Void v) { cb.onSuccess(s); }
+                    @Override public void onError(Exception e) { cb.onError(e); }
+                });
+            } else {
+                BattleState s = fromDoc(d);
+                if (stageStartMillis > s.lastStageStart) {
+                    s.lastStageStart = stageStartMillis;
+
+                    if (s.bossHp > 0 && s.attemptsLeft == 0) s.carryOverPending = true;
+                    save(s, new Callback<Void>() {
+                        @Override public void onSuccess(@Nullable Void v) { cb.onSuccess(s); }
+                        @Override public void onError(Exception e) { cb.onError(e); }
+                    });
+                } else cb.onSuccess(s);
             }
-
-            return "Pobeda! Osvojeno " + finalCoins + " novčića.";
-        } else if ((double) boss.getHp() <= boss.getMaxHp() / 2) {
-            finalCoins = boss.getCoinsReward() / 2;
-
-            // 10% šanse za opremu (prepolovljeno)
-            if (rand.nextInt(100) < 10) {
-                equipmentDropped = true;
-                weapon = rand.nextInt(100) < 5;
+        }).addOnFailureListener(cb::onError);
+    }
+    public ListenerRegistration addStateListener(Callback<BattleState> cb) {
+        return stateDoc().addSnapshotListener((snap, e) -> {
+            if (e != null) { cb.onError(e); return; }
+            if (snap == null || !snap.exists()) {
+                cb.onError(new IllegalStateException("NO_BATTLE_STATE"));
+                return;
             }
-
-            return "Boss nije poražen, ali je oslabljen. Osvojeno " + finalCoins + " novčića.";
-        } else {
-            finalCoins = 0;
-            return "Poraz! Nema nagrade.";
-        }
+            cb.onSuccess(fromDoc(snap));
+        });
     }
-
-    private void applyEquipment(Player player, List<Equipment> activeItems) {
-        for (Equipment e : activeItems) {
-            switch (e.getEffect()) {
-                case INCREASE_PP:
-                    player.setPp((int)(player.getPp() * (1 + e.getValue())));
-                    break;
-                case INCREASE_SUCCESS:
-                    player.setSuccessRate(player.getSuccessRate() + e.getValue() * 100);
-                    break;
-                case EXTRA_ATTACK:
-                    maxAttempts += 1; // čizme daju +1 napad
-                    break;
-                case EXTRA_COINS:
-                    coinsMultiplier += e.getValue(); // luk i strela
-                    break;
+    public void prepareBossAfterLevelUp(int frozenHitChance, long stageStartMillis, Callback<Void> cb) {
+        stateDoc().get().addOnSuccessListener(d -> {
+            BattleState s = d.exists() ? fromDoc(d) : new BattleState();
+            if (!d.exists()) {
+                s.currentBossIndex = 1;
+                s.bossMaxHp = bossHpForIndex(1);
+                s.bossHp = s.bossMaxHp;
             }
+            s.lastStageStart = stageStartMillis;
+            s.attemptsLeft = 5;
+            s.hitChance = Math.max(0, Math.min(100, frozenHitChance));
 
-            // smanji trajanje ako je privremeno
-            if (e.getDuration() > 0) e.setDuration(e.getDuration() - 1);
-        }
-
-        // očisti potrošene ili istekle
-        activeItems.removeIf(e -> e.isConsumable() || e.getDuration() == 0);
-
+            if (s.bossHp > 0 && d.exists()) {
+                s.carryOverPending = true;
+            } else {
+                s.carryOverPending = false;
+                s.halvedReward = false;
+            }
+            save(s, new Callback<Void>() {
+                @Override public void onSuccess(@Nullable Void v) { cb.onSuccess(null); }
+                @Override public void onError(Exception e) { cb.onError(e); }
+            });
+        }).addOnFailureListener(cb::onError);
     }
 
-    // ---- Getteri za UI ----
-    public int getAttemptsLeft() {
-        return attemptsLeft;
+    public void performAttack(int successPercent, long playerPP, Callback<AttackResult> cb) {
+        final int p  = Math.max(0, Math.min(100, successPercent));
+        final long pp = Math.max(0L, playerPP);
+
+        db.runTransaction(tr -> {
+                    DocumentSnapshot sdoc = tr.get(stateDoc());
+                    if (!sdoc.exists()) throw new IllegalStateException("NO_BATTLE_STATE");
+                    BattleState s = fromDoc(sdoc);
+
+                    AttackResult ar = new AttackResult();
+                    if (s.attemptsLeft <= 0) {
+                        ar.fightEnded = true;
+                        ar.bossHpAfter = s.bossHp;
+                        ar.attemptsLeftAfter = 0;
+                        return ar;
+                    }
+
+                    boolean hit = (new java.util.Random().nextInt(100) < p);
+                    ar.hit = hit;
+
+                    if (hit) {
+                        long newHp = s.bossHp - pp;
+                        ar.damageApplied = Math.min(pp, s.bossHp);
+                        s.bossHp = Math.max(0, newHp);
+                    } else {
+                        ar.damageApplied = 0;
+                    }
+
+                    s.attemptsLeft -= 1;
+
+                    ar.bossHpAfter = s.bossHp;
+                    ar.attemptsLeftAfter = s.attemptsLeft;
+                    ar.bossDefeated = (s.bossHp <= 0);
+                    ar.fightEnded = ar.bossDefeated || s.attemptsLeft == 0;
+
+                    if (ar.fightEnded && !ar.bossDefeated) {
+                        if (s.bossHp <= s.bossMaxHp / 2) s.halvedReward = true;
+                        s.carryOverPending = true;
+                    }
+
+                    Map<String, Object> up = new HashMap<>();
+                    up.put("bossHp", s.bossHp);
+                    up.put("attemptsLeft", s.attemptsLeft);
+                    up.put("halvedReward", s.halvedReward);
+                    up.put("carryOverPending", s.carryOverPending);
+                    up.put("updatedAt", FieldValue.serverTimestamp());
+                    tr.set(stateDoc(), up, SetOptions.merge());
+
+                    return ar;
+                }).addOnSuccessListener(cb::onSuccess)
+                .addOnFailureListener(cb::onError);
     }
 
-    public boolean isFinished() {
-        return finished;
+
+
+    public void resolveVictoryAndAdvance(Callback<VictoryResult> cb) {
+        final DocumentReference userDoc = db.collection("users").document(uid);
+        final CollectionReference eqCol = db.collection("users").document(uid).collection("equipment");
+
+        db.runTransaction(tr -> {
+                    DocumentSnapshot sd = tr.get(stateDoc());
+                    if (!sd.exists()) throw new IllegalStateException("NO_BATTLE_STATE");
+                    BattleState s = fromDoc(sd);
+                    if (s.bossHp > 0) throw new IllegalStateException("BOSS_NOT_DEFEATED");
+
+                    long base = coinsForIndex(s.currentBossIndex);
+                    long reward = s.halvedReward ? Math.round(base / 2.0) : base;
+
+                    DocumentSnapshot ud = tr.get(userDoc);
+                    Long coins = ud.getLong("coins");
+                    if (coins == null) coins = 0L;
+                    tr.update(userDoc, "coins", coins + reward);
+
+                    double dropChance = 0.20;
+                    if (s.halvedReward) dropChance *= 0.5;
+
+                    boolean drop = new java.util.Random().nextDouble() < dropChance;
+
+                    VictoryResult out = new VictoryResult();
+                    out.coinsAwarded = reward;
+
+                    if (drop) {
+                        boolean weapon = new java.util.Random().nextInt(100) < 5;
+                        String name, type;
+                        double bonus;
+                        int charges;
+
+                        if (weapon) {
+                            name = "Mač (+5% PP)";
+                            type = "WEAPON";
+                            bonus = 0.05;
+                            charges = -1;
+                        } else {
+                            name = "Rukavice (+10% PP)";
+                            type = "CLOTHES";
+                            bonus = 0.10;
+                            charges = 2;
+                        }
+
+                        DocumentReference newEq = eqCol.document();
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("name", name);
+                        m.put("type", type);
+                        m.put("effect", "INCREASE_PP");
+                        m.put("ppBonus", bonus);
+                        m.put("charges", charges);
+                        m.put("isActive", false);
+                        m.put("createdAt", FieldValue.serverTimestamp());
+                        tr.set(newEq, m);
+
+                        out.equipmentDropped = true;
+                        out.equipmentDocId  = newEq.getId();
+                        out.equipmentName   = name;
+                        out.equipmentType   = type;
+                        out.ppBonus         = bonus;
+                        out.charges         = charges;
+                    }
+
+                    int nextIdx = s.currentBossIndex + 1;
+                    long nextHp = bossHpForIndex(nextIdx);
+
+                    Map<String, Object> nm = new HashMap<>();
+                    nm.put("currentBossIndex", nextIdx);
+                    nm.put("bossMaxHp", nextHp);
+                    nm.put("bossHp", nextHp);
+                    nm.put("attemptsLeft", 5);
+                    nm.put("halvedReward", false);
+                    nm.put("carryOverPending", false);
+                    nm.put("lastStageStart", s.lastStageStart);
+                    nm.put("updatedAt", FieldValue.serverTimestamp());
+                    tr.set(stateDoc(), nm, SetOptions.merge());
+
+                    out.nextBossIndex = nextIdx;
+                    out.nextBossMaxHp = nextHp;
+                    return out;
+                }).addOnSuccessListener(cb::onSuccess)
+                .addOnFailureListener(cb::onError);
     }
 
-    public int getFinalCoins() {
-        return finalCoins;
+    public void save(BattleState s, Callback<Void> cb) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("currentBossIndex", s.currentBossIndex);
+        m.put("bossMaxHp", s.bossMaxHp);
+        m.put("bossHp", s.bossHp);
+        m.put("attemptsLeft", s.attemptsLeft);
+        m.put("halvedReward", s.halvedReward);
+        m.put("carryOverPending", s.carryOverPending);
+        m.put("lastStageStart", s.lastStageStart);
+        m.put("updatedAt", FieldValue.serverTimestamp());
+        m.put("hitChance", s.hitChance);
+        stateDoc().set(m, SetOptions.merge())
+                .addOnSuccessListener(v -> cb.onSuccess(null))
+                .addOnFailureListener(cb::onError);
     }
 
-    public boolean hasEquipment() {
-        return equipmentDropped;
-    }
-
-    public boolean isWeapon() {
-        return weapon;
-    }
-    public int getMaxAttempts() {
-        return maxAttempts;
+    private static BattleState fromDoc(DocumentSnapshot d) {
+        BattleState s = new BattleState();
+        Long idx = d.getLong("currentBossIndex");
+        s.currentBossIndex = idx==null?1:idx.intValue();
+        Long max = d.getLong("bossMaxHp");
+        s.bossMaxHp = max==null? bossHpForIndex(s.currentBossIndex) : max;
+        Long hp = d.getLong("bossHp");
+        s.bossHp = hp==null? s.bossMaxHp : hp;
+        Long att = d.getLong("attemptsLeft");
+        s.attemptsLeft = att==null?5:att.intValue();
+        Boolean half = d.getBoolean("halvedReward");
+        s.halvedReward = Boolean.TRUE.equals(half);
+        Boolean carry = d.getBoolean("carryOverPending");
+        s.carryOverPending = Boolean.TRUE.equals(carry);
+        Long ls = d.getLong("lastStageStart");
+        s.lastStageStart = ls==null?0:ls;
+        Integer hc = d.getLong("hitChance") == null ? null : d.getLong("hitChance").intValue();
+        s.hitChance = hc == null ? 0 : hc;
+        return s;
     }
 }

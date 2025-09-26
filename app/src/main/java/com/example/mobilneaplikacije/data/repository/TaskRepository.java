@@ -4,6 +4,7 @@ import androidx.annotation.Nullable;
 
 import com.example.mobilneaplikacije.data.model.Task;
 import com.example.mobilneaplikacije.data.model.TaskOccurrence;
+import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.*;
@@ -20,7 +21,7 @@ public class TaskRepository {
     private final FirebaseFirestore db;
     private final String uid;
 
-    public TaskRepository(android.content.Context context) {
+    public TaskRepository() {
         this.db = FirebaseFirestore.getInstance();
         FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
         if (u == null) throw new IllegalStateException("User not logged in");
@@ -183,22 +184,42 @@ public class TaskRepository {
         tasksCol().document(taskId).get().addOnSuccessListener(d -> {
             if (!d.exists()) { cb.onSuccess(null); return; }
             Task t = fromDoc(d);
+
             if (isFinishedOrMissed(t)) {
                 cb.onError(new IllegalStateException("Cannot delete finished/missed"));
                 return;
             }
 
-            occCol(taskId).get().addOnSuccessListener(snap -> {
-                WriteBatch b = db.batch();
-                for (DocumentSnapshot x : snap.getDocuments()) {
-                    b.delete(x.getReference());
-                }
-                b.delete(tasksCol().document(taskId));
-                b.commit().addOnSuccessListener(v -> cb.onSuccess(null))
+            if (!t.isRecurring()) {
+                tasksCol().document(taskId).delete()
+                        .addOnSuccessListener(v -> cb.onSuccess(null))
                         .addOnFailureListener(cb::onError);
-            }).addOnFailureListener(cb::onError);
+                return;
+            }
+
+            long now = System.currentTimeMillis();
+
+            occCol(taskId).whereGreaterThanOrEqualTo("dueDateTime", now).get()
+                    .addOnSuccessListener(snap -> {
+                        WriteBatch b = db.batch();
+                        for (DocumentSnapshot x : snap.getDocuments()) {
+                            b.delete(x.getReference());
+                        }
+
+                        b.update(tasksCol().document(taskId),
+                                "status", "CANCELLED",
+                                "updatedAt", FieldValue.serverTimestamp()
+                        );
+
+                        b.commit()
+                                .addOnSuccessListener(v -> cb.onSuccess(null))
+                                .addOnFailureListener(cb::onError);
+                    })
+                    .addOnFailureListener(cb::onError);
+
         }).addOnFailureListener(cb::onError);
     }
+
 
     public void getOccurrencesForRange(String taskId, long start, long end, Callback<List<TaskOccurrence>> cb) {
         occCol(taskId)
@@ -273,32 +294,40 @@ public class TaskRepository {
                     if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2)allowed = false;
                     if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
 
+                    int awardXp = allowed ? baseXp : 0;
+
+                    tr.update(occRef, "status", "DONE", "updatedAt", FieldValue.serverTimestamp());
                     Map<String, Object> log = new HashMap<>();
                     log.put("taskId", taskId);
                     log.put("occurrenceId", occId);
                     log.put("completedAt", now);
                     log.put("difficulty", difficulty);
                     log.put("importance", importance);
+                    log.put("xpAwarded", awardXp);
                     tr.set(logsCol().document(), log);
 
-                    Map<String, Object> dayUpd = new HashMap<>();
-                    if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
-                    if ("LAK".equals(diffN))       dayUpd.put("easy", easy + 1);
-                    if ("TEZAK".equals(diffN))     dayUpd.put("hard", hard + 1);
-                    if ("NORMALAN".equals(impN))   dayUpd.put("normal", normal + 1);
-                    if ("VAZAN".equals(impN))      dayUpd.put("important", important + 1);
-                    if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
-                    if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
+                    if (allowed) {
+                        Map<String, Object> dayUpd = new HashMap<>();
+                        if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
+                        if ("LAK".equals(diffN)) dayUpd.put("easy", easy + 1);
+                        if ("TEZAK".equals(diffN)) dayUpd.put("hard", hard + 1);
 
-                    if ("EKSTREMNO_TEZAK".equals(diffN)) {
-                        Map<String, Object> wUpd = new HashMap<>();
-                        wUpd.put("extHard", extHard + 1);
-                        tr.set(wRef, wUpd, SetOptions.merge());
-                    }
-                    if ("SPECIJALAN".equals(impN)) {
-                        Map<String, Object> mUpd = new HashMap<>();
-                        mUpd.put("special", special + 1);
-                        tr.set(mRef, mUpd, SetOptions.merge());
+                        if ("NORMALAN".equals(impN)) dayUpd.put("normal", normal + 1);
+                        if ("VAZAN".equals(impN)) dayUpd.put("important", important + 1);
+                        if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
+
+                        if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
+
+                        if ("EKSTREMNO_TEZAK".equals(diffN)) {
+                            Map<String, Object> wUpd = new HashMap<>();
+                            wUpd.put("extHard", extHard + 1);
+                            tr.set(wRef, wUpd, SetOptions.merge());
+                        }
+                        if ("SPECIJALAN".equals(impN)) {
+                            Map<String, Object> mUpd = new HashMap<>();
+                            mUpd.put("special", special + 1);
+                            tr.set(mRef, mUpd, SetOptions.merge());
+                        }
                     }
                     return null;
                 }).addOnSuccessListener(cb::onSuccess)
@@ -354,6 +383,7 @@ public class TaskRepository {
                     if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2) allowed = false;
                     if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
 
+                    int awardXp = allowed ? baseXp : 0;
 
                     tr.update(tRef, "status", "DONE", "updatedAt", FieldValue.serverTimestamp());
 
@@ -363,26 +393,31 @@ public class TaskRepository {
                     log.put("completedAt", now);
                     log.put("difficulty", difficulty);
                     log.put("importance", importance);
+                    log.put("xpAwarded", awardXp);
                     tr.set(logsCol().document(), log);
 
-                    Map<String, Object> dayUpd = new HashMap<>();
-                    if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
-                    if ("LAK".equals(diffN)) dayUpd.put("easy", easy + 1);
-                    if ("TEZAK".equals(diffN)) dayUpd.put("hard", hard + 1);
-                    if ("NORMALAN".equals(impN)) dayUpd.put("normal", normal + 1);
-                    if ("VAZAN".equals(impN)) dayUpd.put("important", important + 1);
-                    if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
-                    if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
+                    if (allowed) {
+                        Map<String, Object> dayUpd = new HashMap<>();
+                        if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
+                        if ("LAK".equals(diffN)) dayUpd.put("easy", easy + 1);
+                        if ("TEZAK".equals(diffN)) dayUpd.put("hard", hard + 1);
 
-                    if ("EKSTREMNO_TEZAK".equals(diffN)) {
-                        Map<String, Object> wUpd = new HashMap<>();
-                        wUpd.put("extHard", extHard + 1);
-                        tr.set(wRef, wUpd, SetOptions.merge());
-                    }
-                    if ("SPECIJALAN".equals(impN)) {
-                        Map<String, Object> mUpd = new HashMap<>();
-                        mUpd.put("special", special + 1);
-                        tr.set(mRef, mUpd, SetOptions.merge());
+                        if ("NORMALAN".equals(impN)) dayUpd.put("normal", normal + 1);
+                        if ("VAZAN".equals(impN)) dayUpd.put("important", important + 1);
+                        if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
+
+                        if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
+
+                        if ("EKSTREMNO_TEZAK".equals(diffN)) {
+                            Map<String, Object> wUpd = new HashMap<>();
+                            wUpd.put("extHard", extHard + 1);
+                            tr.set(wRef, wUpd, SetOptions.merge());
+                        }
+                        if ("SPECIJALAN".equals(impN)) {
+                            Map<String, Object> mUpd = new HashMap<>();
+                            mUpd.put("special", special + 1);
+                            tr.set(mRef, mUpd, SetOptions.merge());
+                        }
                     }
 
                     return null;
@@ -510,26 +545,92 @@ public class TaskRepository {
                 .addOnFailureListener(cb::onError);
     }
 
-    public void calculateSuccessRate(Callback<Double> cb) {
-        getAllTasks(new Callback<List<Task>>() {
-            @Override
-            public void onSuccess(List<Task> tasks) {
-                int done = 0;
-                int total = 0;
-                for (Task t : tasks) {
-                    String st = t.getStatus();
-                    if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue; // ne računamo
-                    total++;
-                    if ("DONE".equals(st)) done++;
-                }
-                double rate = total > 0 ? (done * 100.0 / total) : 0.0;
-                cb.onSuccess(rate);
-            }
+    public void calculateSuccessRate(long fromMillis, long toMillis, Callback<Double> cb) {
+        final int[] totalCreated = {0};
+        final int[] donePos = {0};
+        final int[] overQuota = {0};
+        final int[] pending = {3};
 
-            @Override
-            public void onError(Exception e) {
-                cb.onError(e);
-            }
-        });
+        Timestamp fromTs = new Timestamp(new Date(fromMillis));
+        Timestamp toTs   = new Timestamp(new Date(toMillis));
+
+        tasksCol()
+                .whereEqualTo("isRecurring", false)
+                .whereGreaterThanOrEqualTo("createdAt", fromTs)
+                .whereLessThanOrEqualTo("createdAt", toTs)
+                .get(Source.SERVER)
+                .addOnSuccessListener(snap -> {
+                    int cnt = 0;
+                    for (DocumentSnapshot d : snap.getDocuments()) {
+                        String st = d.getString("status");
+                        if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue;
+                        cnt++;
+                    }
+                    totalCreated[0] += cnt;
+                    if (--pending[0] == 0) {
+                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
+                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
+                    }
+                })
+                .addOnFailureListener(cb::onError);
+
+        tasksCol().whereEqualTo("isRecurring", true).get(Source.SERVER)
+                .addOnSuccessListener(recSnap -> {
+                    if (recSnap.isEmpty()) {
+                        if (--pending[0] == 0) {
+                            int denom = Math.max(0, totalCreated[0] - overQuota[0]);
+                            cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
+                        }
+                        return;
+                    }
+                    for (DocumentSnapshot master : recSnap.getDocuments()) {
+                        pending[0]++;
+                        occCol(master.getId())
+                                .whereGreaterThanOrEqualTo("createdAt", fromTs)
+                                .whereLessThanOrEqualTo("createdAt", toTs)
+                                .get(Source.SERVER)
+                                .addOnSuccessListener(occSnap -> {
+                                    int cnt = 0;
+                                    for (DocumentSnapshot od : occSnap.getDocuments()) {
+                                        String st = od.getString("status");
+                                        if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue;
+                                        cnt++;
+                                    }
+                                    totalCreated[0] += cnt;
+                                    if (--pending[0] == 0) {
+                                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
+                                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
+                                    }
+                                })
+                                .addOnFailureListener(cb::onError);
+                    }
+                    if (--pending[0] == 0) {
+                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
+                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
+                    }
+                })
+                .addOnFailureListener(cb::onError);
+
+        logsCol()
+                .whereGreaterThanOrEqualTo("completedAt", fromMillis)
+                .whereLessThanOrEqualTo("completedAt", toMillis)
+                .get(Source.SERVER)
+                .addOnSuccessListener(logSnap -> {
+                    int pos = 0, over = 0;
+                    for (DocumentSnapshot d : logSnap.getDocuments()) {
+                        Long xpL = d.getLong("xpAwarded");
+                        int xp = (xpL == null) ? 1 : xpL.intValue();
+                        if (xp > 0) pos++; else over++;
+                    }
+                    donePos[0] = pos;
+                    overQuota[0] = over;
+                    if (--pending[0] == 0) {
+                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
+                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
+                    }
+                })
+                .addOnFailureListener(cb::onError);
     }
+
+    public interface StageSuccessCallback { void onSuccess(int successPercent, long totalCounted); void onError(Exception e); }
 }
