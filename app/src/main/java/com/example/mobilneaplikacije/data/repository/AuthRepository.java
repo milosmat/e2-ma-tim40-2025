@@ -51,6 +51,7 @@ public class AuthRepository {
                     data.put("coins", p.getCoins());
                     data.put("successRate", p.getSuccessRate());
                     data.put("createdAt", FieldValue.serverTimestamp());
+                    data.put("lastLevelUpAt", 0L);
 
                     db.collection("users").document(usr.getUid()).set(data)
                             .addOnSuccessListener(v-> {

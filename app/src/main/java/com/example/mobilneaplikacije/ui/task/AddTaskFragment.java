@@ -13,11 +13,11 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.example.mobilneaplikacije.R;
+import com.example.mobilneaplikacije.data.manager.LevelManager;
 import com.example.mobilneaplikacije.data.model.Category;
 import com.example.mobilneaplikacije.data.model.Task;
 import com.example.mobilneaplikacije.data.repository.CategoryRepository;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
-import com.example.mobilneaplikacije.util.XPUtils;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.*;
@@ -149,7 +149,7 @@ public class AddTaskFragment extends Fragment {
     }
 
     private void loadTaskForEdit(String taskIdHash) {
-        TaskRepository repo = new TaskRepository(requireContext());
+        TaskRepository repo = new TaskRepository();
         repo.getTaskById(taskIdHash, new TaskRepository.Callback<Task>() {
             @Override public void onSuccess(Task t) {
                 if (t == null) { Toast.makeText(getContext(),"Task ne postoji",Toast.LENGTH_SHORT).show(); return; }
@@ -158,17 +158,12 @@ public class AddTaskFragment extends Fragment {
                 setSpinnerSelection(spDifficulty, t.getDifficulty());
                 setSpinnerSelection(spImportance, t.getImportance());
 
-                for (int i=0;i<categories.size();i++) {
-                    if (categories.get(i).getIdHash().equals(t.getCategoryIdHash())) {
-                        spCategory.setSelection(i); break;
-                    }
-                }
                 if (t.isRecurring()) {
                     switchRecurring.setChecked(true);
                     etRepeatInterval.setText(String.valueOf(t.getRepeatInterval()));
                     setSpinnerSelection(spRepeatUnit, t.getRepeatUnit());
                     pickedDateTime = t.getStartDate();
-                    pickedEndDate = t.getEndDate();
+                    pickedEndDate  = t.getEndDate();
                 } else {
                     pickedDateTime = t.getDueDateTime();
                 }
@@ -193,7 +188,7 @@ public class AddTaskFragment extends Fragment {
         String importance = spImportance.getSelectedItem().toString();
 
         boolean isRecurring = switchRecurring.isChecked();
-        int repeatInterval = 0; String repeatUnit = null; long startDate = 0; long endDate = 0;
+        int repeatInterval; String repeatUnit; long startDate; long endDate;
 
         if (isRecurring) {
             String intervalText = etRepeatInterval.getText().toString().trim();
@@ -203,68 +198,107 @@ public class AddTaskFragment extends Fragment {
             }
             repeatInterval = Integer.parseInt(intervalText);
             repeatUnit = spRepeatUnit.getSelectedItem().toString();
+
             if (pickedDateTime == 0 || pickedEndDate == 0) {
                 Toast.makeText(getContext(), "Izaberi datum početka i završetka!", Toast.LENGTH_SHORT).show();
                 return;
             }
             startDate = pickedDateTime;
             endDate = pickedEndDate;
-        }
-
-        int xp = XPUtils.calculateXP(difficulty, importance);
-
-        TaskRepository repo = new TaskRepository(requireContext());
-        if (editTaskIdHash == null) {
-            Task t = new Task();
-            t.setTitle(title);
-            t.setDescription(description);
-            t.setDifficulty(difficulty);
-            t.setImportance(importance);
-            t.setXpPoints(xp);
-            t.setStatus("ACTIVE");
-            t.setRecurring(isRecurring);
-            t.setRepeatInterval(repeatInterval);
-            t.setRepeatUnit(repeatUnit);
-            t.setStartDate(startDate);
-            t.setEndDate(endDate);
-            t.setDueDateTime(isRecurring ? 0 : pickedDateTime);
-            t.setCategoryIdHash(categories.get(catIndex).getIdHash());
-
-            repo.insertTask(t, new TaskRepository.Callback<String>() {
-                @Override public void onSuccess(String idHash) {
-                    Toast.makeText(requireContext().getApplicationContext(), "Zadatak sačuvan!", Toast.LENGTH_SHORT).show();
-                    requireActivity().getSupportFragmentManager().popBackStack();
-                }
-                @Override public void onError(Exception e) {
-                    Toast.makeText(getContext(),"Greška: "+e.getMessage(),Toast.LENGTH_LONG).show();
-                }
-            });
         } else {
-            Task t = new Task();
-            t.setIdHash(editTaskIdHash);
-            t.setTitle(title);
-            t.setDescription(description);
-            t.setDifficulty(difficulty);
-            t.setImportance(importance);
-            t.setXpPoints(xp);
-            t.setRecurring(isRecurring);
-            t.setRepeatInterval(repeatInterval);
-            t.setRepeatUnit(repeatUnit);
-            t.setStartDate(startDate);
-            t.setEndDate(endDate);
-            t.setDueDateTime(isRecurring ? 0 : pickedDateTime);
-            t.setCategoryIdHash(categories.get(catIndex).getIdHash());
-
-            repo.updateTask(editTaskIdHash, t, new TaskRepository.Callback<Void>() {
-                @Override public void onSuccess(Void v) {
-                    Toast.makeText(getContext(),"Zadatak izmenjen!",Toast.LENGTH_SHORT).show();
-                    requireActivity().getSupportFragmentManager().popBackStack();
-                }
-                @Override public void onError(Exception e) {
-                    Toast.makeText(getContext(),"Greška: "+e.getMessage(),Toast.LENGTH_LONG).show();
-                }
-            });
+            endDate = 0;
+            startDate = 0;
+            repeatUnit = null;
+            repeatInterval = 0;
         }
+
+        btnSave.setEnabled(false);
+        LevelManager lm = new LevelManager();
+
+        lm.getTaskDifficultyXp(difficulty, new LevelManager.XpCallback() {
+            @Override public void onSucces(int diffXp) {
+                lm.getTaskImportanceXp(importance, new LevelManager.XpCallback() {
+                    @Override public void onSucces(int impXp) {
+                        int xp = diffXp + impXp;
+
+                        TaskRepository repo = new TaskRepository();
+                        if (editTaskIdHash == null) {
+                            Task t = new Task();
+                            t.setTitle(title);
+                            t.setDescription(description);
+                            t.setDifficulty(difficulty);
+                            t.setImportance(importance);
+                            t.setXpPoints(xp);
+                            t.setStatus("ACTIVE");
+                            t.setRecurring(isRecurring);
+                            t.setRepeatInterval(repeatInterval);
+                            t.setRepeatUnit(repeatUnit);
+                            t.setStartDate(startDate);
+                            t.setEndDate(endDate);
+                            t.setDueDateTime(isRecurring ? 0 : pickedDateTime);
+                            t.setCategoryIdHash(categories.get(catIndex).getIdHash());
+
+                            repo.insertTask(t, new TaskRepository.Callback<String>() {
+                                @Override public void onSuccess(String idHash) {
+                                    btnSave.setEnabled(true);
+                                    if (!isAdded()) return;
+                                    if (getContext() != null) {
+                                        Toast.makeText(getContext(), "Zadatak sačuvan!", Toast.LENGTH_SHORT).show();
+                                    }
+                                    if (getActivity() != null) {
+                                        getActivity().getSupportFragmentManager().popBackStack();
+                                    }
+                                }
+                                @Override public void onError(Exception e) {
+                                    btnSave.setEnabled(true);
+                                    Toast.makeText(getContext(),"Greška: "+e.getMessage(),Toast.LENGTH_LONG).show();
+                                }
+                            });
+                        } else {
+                            Task t = new Task();
+                            t.setIdHash(editTaskIdHash);
+                            t.setTitle(title);
+                            t.setDescription(description);
+                            t.setDifficulty(difficulty);
+                            t.setImportance(importance);
+                            t.setXpPoints(xp);
+                            t.setRecurring(isRecurring);
+                            t.setRepeatInterval(repeatInterval);
+                            t.setRepeatUnit(repeatUnit);
+                            t.setStartDate(startDate);
+                            t.setEndDate(endDate);
+                            t.setDueDateTime(isRecurring ? 0 : pickedDateTime);
+                            t.setCategoryIdHash(categories.get(catIndex).getIdHash());
+
+                            repo.updateTask(editTaskIdHash, t, new TaskRepository.Callback<Void>() {
+                                @Override public void onSuccess(Void v) {
+                                    btnSave.setEnabled(true);
+                                    if (!isAdded()) return;
+                                    if (getContext() != null) {
+                                        Toast.makeText(getContext(),"Zadatak izmenjen!",Toast.LENGTH_SHORT).show();
+                                    }
+                                    if (getActivity() != null) {
+                                        getActivity().getSupportFragmentManager().popBackStack();
+                                    }
+                                }
+                                @Override public void onError(Exception e) {
+                                    btnSave.setEnabled(true);
+                                    Toast.makeText(getContext(),"Greška: "+e.getMessage(),Toast.LENGTH_LONG).show();
+                                }
+                            });
+                        }
+                    }
+                    @Override public void onFailure(String errorMessage) {
+                        btnSave.setEnabled(true);
+                        Toast.makeText(getContext(), "Greška (importance XP): " + errorMessage, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+            @Override public void onFailure(String errorMessage) {
+                btnSave.setEnabled(true);
+                Toast.makeText(getContext(), "Greška (difficulty XP): " + errorMessage, Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void setSpinnerSelection(Spinner spinner, String value) {

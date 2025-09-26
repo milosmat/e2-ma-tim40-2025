@@ -21,6 +21,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.Query;
 
 public class TaskDetailFragment extends Fragment {
 
@@ -134,7 +135,7 @@ public class TaskDetailFragment extends Fragment {
         btnDelete = v.findViewById(R.id.btnDelete);
         btnEdit = v.findViewById(R.id.btnEdit);
 
-        TaskRepository repo = new TaskRepository(requireContext());
+        TaskRepository repo = new TaskRepository();
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
@@ -170,50 +171,77 @@ public class TaskDetailFragment extends Fragment {
 
         btnMarkDone.setOnClickListener(x -> {
             repo.getTaskById(taskIdHash, new TaskRepository.Callback<Task>() {
-                @Override
-                public void onSuccess(Task t) {
+                @Override public void onSuccess(Task t) {
                     if (t == null) return;
-                    if (occurrenceId != null) {
-                        // DONE occurrence
-                        repo.markOccurrenceDone(taskIdHash, occurrenceId, 0, t.getDifficulty(), t.getImportance(),
-                                new TaskRepository.Callback<Void>() {
-                                    @Override
-                                    public void onSuccess(@Nullable Void v) {
-                                        giveXpFromTask(t); // koristi LevelManager
-                                        updateButtons(lastTaskIsRecurring, "DONE", "DONE");
-                                    }
 
-                                    @Override
-                                    public void onError(Exception e) {
-                                        handleDoneError(e);
-                                    }
-                                });
+                    LevelManager lm = new LevelManager();
+                    lm.getTaskDifficultyXp(t.getDifficulty(), new LevelManager.XpCallback() {
+                        @Override public void onSucces(int diffXp) {
+                            lm.getTaskImportanceXp(t.getImportance(), new LevelManager.XpCallback() {
+                                @Override public void onSucces(int impXp) {
+                                    final int totalXp = diffXp + impXp;
 
-                    } else if (!t.isRecurring()) {
-                        // DONE single
-                        repo.markSingleDone(taskIdHash, 0, t.getDifficulty(), t.getImportance(),
-                                new TaskRepository.Callback<Void>() {
-                                    @Override
-                                    public void onSuccess(@Nullable Void v) {
-                                        giveXpFromTask(t);
-                                        updateButtons(lastTaskIsRecurring, "DONE", "DONE");
-                                    }
+                                    TaskRepository.Callback<Void> afterDoneCb = new TaskRepository.Callback<Void>() {
+                                        @Override public void onSuccess(@Nullable Void v) {
+                                            String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+                                            FirebaseFirestore.getInstance()
+                                                    .collection("users").document(uid)
+                                                    .collection("completionLogs")
+                                                    .whereEqualTo("taskId", taskIdHash)
+                                                    .orderBy("completedAt", Query.Direction.DESCENDING)
+                                                    .limit(1)
+                                                    .get()
+                                                    .addOnSuccessListener(qs -> {
+                                                        int awarded = 0;
+                                                        if (!qs.isEmpty()) {
+                                                            Long xpL = qs.getDocuments().get(0).getLong("xpAwarded");
+                                                            awarded = (xpL == null) ? totalXp : xpL.intValue();
+                                                        }
+                                                        if (awarded > 0) {
+                                                            lm.addXp(awarded, player -> {
+                                                                if (!isAdded()) return;
+                                                                requireActivity().getSupportFragmentManager()
+                                                                        .beginTransaction()
+                                                                        .replace(R.id.fragment_container, new BossFragment())
+                                                                        .addToBackStack(null)
+                                                                        .commit();
+                                                            });
+                                                            Toast.makeText(getContext(),"Urađeno! +" + awarded + " XP",Toast.LENGTH_LONG).show();
+                                                        } else {
+                                                            Toast.makeText(getContext(),"Urađeno! (bez XP, pređena kvota)",Toast.LENGTH_LONG).show();
+                                                        }
+                                                        updateButtons(lastTaskIsRecurring, "DONE", "DONE");
+                                                    })
+                                                    .addOnFailureListener(e -> {
+                                                        Toast.makeText(getContext(),"Urađeno! (nepoznat XP)",Toast.LENGTH_LONG).show();
+                                                        updateButtons(lastTaskIsRecurring, "DONE", "DONE");
+                                                    });
+                                        }
+                                        @Override public void onError(Exception e) { handleDoneError(e); }
+                                    };
 
-                                    @Override
-                                    public void onError(Exception e) {
-                                        handleDoneError(e);
+                                    if (occurrenceId != null) {
+                                        repo.markOccurrenceDone(taskIdHash, occurrenceId, totalXp, t.getDifficulty(), t.getImportance(), afterDoneCb);
+                                    } else if (!t.isRecurring()) {
+                                        repo.markSingleDone(taskIdHash, totalXp, t.getDifficulty(), t.getImportance(), afterDoneCb);
+                                    } else {
+                                        Toast.makeText(getContext(),"Za ponavljajući sa kalendara prosledi occurrence.",Toast.LENGTH_LONG).show();
                                     }
-                                });
-                    } else {
-                        Toast.makeText(getContext(), "Za ponavljajući sa kalendara prosledi occurrence.", Toast.LENGTH_LONG).show();
-                    }
+                                }
+                                @Override public void onFailure(String msg) {
+                                    Toast.makeText(getContext(),"Greška XP importance: " + msg,Toast.LENGTH_LONG).show();
+                                }
+                            });
+                        }
+                        @Override public void onFailure(String msg) {
+                            Toast.makeText(getContext(),"Greška XP difficulty: " + msg,Toast.LENGTH_LONG).show();
+                        }
+                    });
                 }
-
-                @Override
-                public void onError(Exception e) {
-                }
+                @Override public void onError(Exception e) { }
             });
         });
+
 
         btnPause.setOnClickListener(x -> {
             repo.getTaskById(taskIdHash, new TaskRepository.Callback<Task>() {
@@ -244,7 +272,7 @@ public class TaskDetailFragment extends Fragment {
 
         btnCancel.setOnClickListener(x -> {
             if (occurrenceId != null) {
-                new TaskRepository(requireContext()).cancelOccurrence(taskIdHash, occurrenceId, toastCb("Pojava otkazana"));
+                new TaskRepository().cancelOccurrence(taskIdHash, occurrenceId, toastCb("Pojava otkazana"));
             } else {
                 repo.updateTaskStatus(taskIdHash, "CANCELLED", toastCb("Zadatak otkazan"));
             }
@@ -335,45 +363,7 @@ public class TaskDetailFragment extends Fragment {
 
     private void handleDoneError(Exception e) {
         String msg = "Greška: " + e.getMessage();
-        if ("XP_QUOTA_EXCEEDED".equals(e.getMessage())) msg = "Pređena je dnevna/nev/mes kvota XP.";
+        if ("XP_QUOTA_EXCEEDED".equals(e.getMessage())) msg = "Pređena je kvota, XP se ne dodeljuje.";
         Toast.makeText(getContext(), msg, Toast.LENGTH_LONG).show();
-    }
-
-    private void giveXpFromTask(Task t) {
-        LevelManager lm = new LevelManager();
-        lm.getTaskDifficultyXp(t.getDifficulty(), new LevelManager.XpCallback() {
-            @Override
-            public void onSucces(int diffXp) {
-                lm.getTaskImportanceXp(t.getImportance(), new LevelManager.XpCallback() {
-                    @Override
-                    public void onSucces(int impXp) {
-                        int totalXp = diffXp + impXp;
-                        if (totalXp > 0) {
-                            lm.addXp(totalXp, player -> {
-                                if (!isAdded()) return;
-                                requireActivity().getSupportFragmentManager()
-                                        .beginTransaction()
-                                        .replace(R.id.fragment_container, new BossFragment())
-                                        .addToBackStack(null)
-                                        .commit();
-                            });
-                            Toast.makeText(getContext(), "Urađeno! +" + totalXp + " XP", Toast.LENGTH_LONG).show();
-                        } else {
-                            Toast.makeText(getContext(), "Urađeno! (bez XP, pređena kvota)", Toast.LENGTH_LONG).show();
-                        }
-                    }
-
-                    @Override
-                    public void onFailure(String errorMessage) {
-                        Toast.makeText(getContext(), "Greška XP importance: " + errorMessage, Toast.LENGTH_LONG).show();
-                    }
-                });
-            }
-
-            @Override
-            public void onFailure(String errorMessage) {
-                Toast.makeText(getContext(), "Greška XP difficulty: " + errorMessage, Toast.LENGTH_LONG).show();
-            }
-        });
     }
 }

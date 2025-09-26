@@ -70,7 +70,7 @@ public class TaskListFragment extends Fragment {
     }
 
     private void loadTasks() {
-        new TaskRepository(requireContext()).getAllTasks(new TaskRepository.Callback<List<Task>>() {
+        new TaskRepository().getAllTasks(new TaskRepository.Callback<List<Task>>() {
             @Override public void onSuccess(List<Task> data) {
                 allTasks.clear();
                 if (data != null) {
