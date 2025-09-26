@@ -49,8 +49,14 @@ public class BattleManager {
                 s.halvedReward = false;
                 s.carryOverPending = false;
                 s.lastStageStart = (stageStartMillis == 0L) ? System.currentTimeMillis() : stageStartMillis;
+                long priceAnchorCoins = coinsForIndex(Math.max(1, s.currentBossIndex - 1));
                 save(s, new Callback<Void>() {
-                    @Override public void onSuccess(@Nullable Void v) { cb.onSuccess(s); }
+                    @Override public void onSuccess(@Nullable Void v) {
+                        Map<String, Object> up = new HashMap<>();
+                        up.put("priceAnchorCoins", priceAnchorCoins);
+                        stateDoc().set(up, SetOptions.merge());
+                        cb.onSuccess(s);
+                    }
                     @Override public void onError(Exception e) { cb.onError(e); }
                 });
             } else {
@@ -60,7 +66,13 @@ public class BattleManager {
 
                     if (s.bossHp > 0 && s.attemptsLeft == 0) s.carryOverPending = true;
                     save(s, new Callback<Void>() {
-                        @Override public void onSuccess(@Nullable Void v) { cb.onSuccess(s); }
+                        @Override public void onSuccess(@Nullable Void v) {
+                            long priceAnchorCoins = coinsForIndex(Math.max(1, s.currentBossIndex - 1));
+                            Map<String, Object> up = new HashMap<>();
+                            up.put("priceAnchorCoins", priceAnchorCoins);
+                            stateDoc().set(up, SetOptions.merge());
+                            cb.onSuccess(s);
+                        }
                         @Override public void onError(Exception e) { cb.onError(e); }
                     });
                 } else cb.onSuccess(s);
@@ -95,8 +107,16 @@ public class BattleManager {
                 s.carryOverPending = false;
                 s.halvedReward = false;
             }
+
+            long priceAnchorCoins = coinsForIndex(Math.max(1, s.currentBossIndex - 1));
+
             save(s, new Callback<Void>() {
-                @Override public void onSuccess(@Nullable Void v) { cb.onSuccess(null); }
+                @Override public void onSuccess(@Nullable Void v) {
+                    Map<String, Object> up = new HashMap<>();
+                    up.put("priceAnchorCoins", priceAnchorCoins);
+                    stateDoc().set(up, SetOptions.merge());
+                    cb.onSuccess(null);
+                }
                 @Override public void onError(Exception e) { cb.onError(e); }
             });
         }).addOnFailureListener(cb::onError);
@@ -167,6 +187,8 @@ public class BattleManager {
                     BattleState s = fromDoc(sd);
                     if (s.bossHp > 0) throw new IllegalStateException("BOSS_NOT_DEFEATED");
 
+                    long priceAnchorCoins = coinsForIndex(Math.max(1, s.currentBossIndex - 1));
+
                     long base = coinsForIndex(s.currentBossIndex);
                     long reward = s.halvedReward ? Math.round(base / 2.0) : base;
 
@@ -213,11 +235,11 @@ public class BattleManager {
                         tr.set(newEq, m);
 
                         out.equipmentDropped = true;
-                        out.equipmentDocId  = newEq.getId();
-                        out.equipmentName   = name;
-                        out.equipmentType   = type;
-                        out.ppBonus         = bonus;
-                        out.charges         = charges;
+                        out.equipmentDocId = newEq.getId();
+                        out.equipmentName = name;
+                        out.equipmentType = type;
+                        out.ppBonus = bonus;
+                        out.charges = charges;
                     }
 
                     int nextIdx = s.currentBossIndex + 1;
@@ -232,6 +254,7 @@ public class BattleManager {
                     nm.put("carryOverPending", false);
                     nm.put("lastStageStart", s.lastStageStart);
                     nm.put("updatedAt", FieldValue.serverTimestamp());
+                    nm.put("priceAnchorCoins", priceAnchorCoins);
                     tr.set(stateDoc(), nm, SetOptions.merge());
 
                     out.nextBossIndex = nextIdx;
