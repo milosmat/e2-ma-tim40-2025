@@ -6,14 +6,17 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.example.mobilneaplikacije.data.repository.TaskRepository;
 
 public class PlayerRepository {
     private final FirebaseFirestore db;
     private final FirebaseAuth auth;
     private static Player cachedPlayer = null;
     private static String cachedUid = null;
+
     public interface LongCallback { void onResult(long v); void onError(Exception e); }
     public interface VoidCallback { void onSuccess(); void onError(Exception e); }
+    public interface PlayerCallback { void onSuccess(Player player); void onFailure(Exception e); }
 
     public PlayerRepository(){
         db = FirebaseFirestore.getInstance();
@@ -40,13 +43,11 @@ public class PlayerRepository {
             return;
         }
 
-        // Ako je keširan isti UID, vrati odmah
         if (cachedPlayer != null && uid.equals(cachedUid)) {
             callback.onSuccess(cachedPlayer);
             return;
         }
 
-        // U suprotnom, povuci sveže sa servera
         db.collection("users").document(uid)
                 .get(com.google.firebase.firestore.Source.SERVER)
                 .addOnSuccessListener(doc -> {
@@ -65,7 +66,7 @@ public class PlayerRepository {
                         cachedUid = uid;
                         callback.onSuccess(p);
                     } else {
-                        callback.onFailure(new Exception("Korisnički podaci nisu pronađeni"));
+                        callback.onFailure(new Exception("Korisnicki podaci nisu pronadjeni"));
                     }
                 })
                 .addOnFailureListener(callback::onFailure);
@@ -90,6 +91,7 @@ public class PlayerRepository {
                         "coins", cachedPlayer.getCoins(),
                         "successRate", cachedPlayer.getSuccessRate());
     }
+  
     public void getCurrentPP(LongCallback cb) {
         String uid;
         try { uid = currentUid(); } catch (IllegalStateException e) { cb.onError(e); return; }
@@ -126,6 +128,45 @@ public class PlayerRepository {
                 .addOnFailureListener(cb::onError);
     }
 
+    
+    public void refreshSuccessRate(TaskRepository taskRepo, final PlayerCallback callback) {
+        loadPlayer(new PlayerCallback() {
+            @Override
+            public void onSuccess(Player player) {
+                taskRepo.calculateSuccessRate(new TaskRepository.Callback<Double>() {
+                    @Override
+                    public void onSuccess(Double rate) {
+                        if (cachedPlayer != null) {
+                            cachedPlayer.setSuccessRate(rate);
+                            syncWithDatabase();
+                            callback.onSuccess(cachedPlayer);
+                        } else {
+                            // fallback: učitaj opet, pa postavi
+                            loadPlayer(new PlayerCallback() {
+                                @Override public void onSuccess(Player p2) {
+                                    p2.setSuccessRate(rate);
+                                    cachedPlayer = p2;
+                                    cachedUid = currentUid();
+                                    syncWithDatabase();
+                                    callback.onSuccess(p2);
+                                }
+                                @Override public void onFailure(Exception e) { callback.onFailure(e); }
+                            });
+                        }
+                    }
+                    @Override
+                    public void onError(Exception e) {
+                        callback.onFailure(e);
+                    }
+                });
+            }
+            @Override
+            public void onFailure(Exception e) {
+                callback.onFailure(e);
+            }
+        });
+    }
+
     public void addCoins(long delta, VoidCallback cb) {
         String uid;
         try { uid = currentUid(); } catch (IllegalStateException e) { cb.onError(e); return; }
@@ -138,13 +179,10 @@ public class PlayerRepository {
             tr.update(ref, "coins", coins + delta);
             return null;
         }).addOnSuccessListener(v -> {
-            // ažuriraj cache ako postoji
-            if (cachedPlayer != null) cachedPlayer.setCoins(cachedPlayer.getCoins() + (int) delta);
+            if (cachedPlayer != null && uid.equals(cachedUid)) {
+                cachedPlayer.setCoins(cachedPlayer.getCoins() + (int) delta);
+            }
             cb.onSuccess();
         }).addOnFailureListener(cb::onError);
-    }
-    public interface PlayerCallback {
-        void onSuccess(Player player);
-        void onFailure(Exception e);
     }
 }
