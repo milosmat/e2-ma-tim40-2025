@@ -26,8 +26,6 @@ public class AuthRepository {
 
     public FirebaseUser currentUser() {return auth.getCurrentUser();}
 
-    public void logOut() {auth.signOut();}
-
     public boolean isEmailVer() {
         FirebaseUser usr = this.currentUser();
         if(usr != null && usr.isEmailVerified())
@@ -72,7 +70,9 @@ public class AuthRepository {
                 .addOnSuccessListener(r -> {
                     FirebaseUser usr = this.currentUser();
                     if (usr != null && usr.isEmailVerified()) {
-                        callback.onSucces("Uspensa prijava!");
+                        // resetuj keš igrača za novi UID
+                        PlayerRepository.invalidateCache();
+                        callback.onSucces("Uspesna prijava!");
                     } else {
                         auth.signOut();
                         callback.onFailure("Nalog nije verifikovan. Proveri email.");
@@ -81,6 +81,11 @@ public class AuthRepository {
                 .addOnFailureListener(e -> callback.onFailure("Greska: " + e.getMessage()));
     }
 
+    public void logOut() {
+        // prvo očisti keš, pa signOut
+        PlayerRepository.invalidateCache();
+        auth.signOut();
+    }
     public void changePassword(String currentPassword, String newPassword, AuthCallback callback) {
         FirebaseUser usr = this.currentUser();
         if (usr == null || usr.getEmail() == null) {

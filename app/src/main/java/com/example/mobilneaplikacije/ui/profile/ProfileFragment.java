@@ -50,7 +50,7 @@ public class ProfileFragment extends Fragment {
         //tvXP = view.findViewById(R.id.tvXP);
         //tvNexLvlXP = view.findViewById(R.id.tvNextLvlXP);
         tvCoins = view.findViewById(R.id.tvCoins);
-
+        tvMissions = view.findViewById(R.id.tvMissions);
         Button btnLogout = view.findViewById(R.id.btnLogout);
         btnChangePassword = view.findViewById(R.id.btnChangePassword);
 
@@ -104,10 +104,11 @@ public class ProfileFragment extends Fragment {
     }
 
     private void loadCompletedMissionsCount() {
-        if (user == null) return;
+        FirebaseUser freshUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (freshUser == null) return;
 
         CollectionReference logsRef = db.collection("users")
-                .document(user.getUid())
+                .document(freshUser.getUid())
                 .collection("completionLogs");
 
         Query qWithXp = logsRef.whereGreaterThan("xpAwarded", 0);

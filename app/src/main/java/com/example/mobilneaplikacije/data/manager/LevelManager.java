@@ -1,5 +1,7 @@
 package com.example.mobilneaplikacije.data.manager;
 
+import androidx.annotation.Nullable;
+
 import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 
@@ -41,7 +43,9 @@ public class LevelManager {
         }
         return false;
     }
-
+    public interface LevelUpCallback {
+        void onLevelUp(Player player);
+    }
     public void getTaskDifficultyXp(String difficulty, final XpCallback callback) {
         playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
             @Override
@@ -110,18 +114,22 @@ public class LevelManager {
             }
         });
     }
-    public void addXp(int deltaXp) {
+    public void addXp(int deltaXp, @Nullable LevelUpCallback callback) {
         playerRepo.loadPlayer(new PlayerRepository.PlayerCallback() {
             @Override
             public void onSuccess(Player currentPlayer) {
                 int newXp = currentPlayer.getXp() + deltaXp;
                 currentPlayer.setXp(newXp);
-                checkLevelUp(currentPlayer);
+
+                boolean leveledUp = checkLevelUp(currentPlayer);
                 playerRepo.syncWithDatabase();
+
+                if (leveledUp && callback != null) {
+                    callback.onLevelUp(currentPlayer);
+                }
             }
             @Override
-            public void onFailure(Exception e) {
-            }
+            public void onFailure(Exception e) {}
         });
     }
     public interface XpCallback {

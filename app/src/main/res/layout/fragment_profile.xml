@@ -43,6 +43,13 @@
             android:layout_marginTop="8dp"
             style="@android:style/Widget.ProgressBar.Horizontal"/>
 
+        <TextView
+            android:id="@+id/tvMissions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Završene misije: -"
+            android:layout_marginTop="8dp"/>
+
         <TextView android:id="@+id/tvCoins"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"/>

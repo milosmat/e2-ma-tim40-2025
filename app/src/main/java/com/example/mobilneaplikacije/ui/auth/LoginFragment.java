@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment;
 import com.example.mobilneaplikacije.MainActivity;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.repository.AuthRepository;
+import com.example.mobilneaplikacije.ui.task.TaskListFragment;
 import com.google.firebase.auth.*;
 
 public class LoginFragment extends Fragment {
