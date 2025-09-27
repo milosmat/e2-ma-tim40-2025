@@ -24,7 +24,7 @@ public class LevelManager {
     }
 
     public static int getPpForLevel(int level) {
-        if (level == 1) return 40;
+        if (level == 2) return 40;
         int prevPp = getPpForLevel(level - 1);
         return Math.round(prevPp + (prevPp * 0.75f));
     }

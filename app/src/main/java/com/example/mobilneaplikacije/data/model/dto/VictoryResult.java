@@ -7,6 +7,7 @@ public class VictoryResult {
 
     public boolean equipmentDropped;
     public String equipmentDocId;
+    public String equipmentItemId;
     public String equipmentName;
     public String equipmentType;
     public double ppBonus;

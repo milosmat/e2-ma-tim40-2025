@@ -26,4 +26,9 @@
     <string name="boss_image">Boss</string>
     <string name="coin_desc">Novčić</string>
     <string name="chest_desc">Kovčeg sa nagradama</string>
+    <string name="shop_anchor">Osnova za cenu (preth. boss nagrada): %1$d</string>
+    <string name="shop_buy_price">Kupi (%1$d)</string>
+    <string name="shop_bought">Kupljeno: %1$s</string>
+    <string name="shop_weapons_boss_only">Oružje se ne može kupiti – dobija se od bosa.</string>
+    <string name="shop">Prodavnica</string>
 </resources>

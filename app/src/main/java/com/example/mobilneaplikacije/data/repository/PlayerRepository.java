@@ -128,45 +128,6 @@ public class PlayerRepository {
                 .addOnFailureListener(cb::onError);
     }
 
-    
-    public void refreshSuccessRate(TaskRepository taskRepo, final PlayerCallback callback) {
-        loadPlayer(new PlayerCallback() {
-            @Override
-            public void onSuccess(Player player) {
-                taskRepo.calculateSuccessRate(new TaskRepository.Callback<Double>() {
-                    @Override
-                    public void onSuccess(Double rate) {
-                        if (cachedPlayer != null) {
-                            cachedPlayer.setSuccessRate(rate);
-                            syncWithDatabase();
-                            callback.onSuccess(cachedPlayer);
-                        } else {
-                            // fallback: učitaj opet, pa postavi
-                            loadPlayer(new PlayerCallback() {
-                                @Override public void onSuccess(Player p2) {
-                                    p2.setSuccessRate(rate);
-                                    cachedPlayer = p2;
-                                    cachedUid = currentUid();
-                                    syncWithDatabase();
-                                    callback.onSuccess(p2);
-                                }
-                                @Override public void onFailure(Exception e) { callback.onFailure(e); }
-                            });
-                        }
-                    }
-                    @Override
-                    public void onError(Exception e) {
-                        callback.onFailure(e);
-                    }
-                });
-            }
-            @Override
-            public void onFailure(Exception e) {
-                callback.onFailure(e);
-            }
-        });
-    }
-
     public void addCoins(long delta, VoidCallback cb) {
         String uid;
         try { uid = currentUid(); } catch (IllegalStateException e) { cb.onError(e); return; }
