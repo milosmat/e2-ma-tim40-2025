@@ -3,11 +3,15 @@ package com.example.mobilneaplikacije.data.manager;
 import androidx.annotation.Nullable;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.*;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import com.example.mobilneaplikacije.data.model.dto.AttackResult;
 import com.example.mobilneaplikacije.data.model.dto.VictoryResult;
 import com.example.mobilneaplikacije.data.model.dto.BattleState;
+import com.example.mobilneaplikacije.data.model.Item;
+import com.example.mobilneaplikacije.data.repository.CatalogRepository;
 
 public class BattleManager {
 
@@ -178,10 +182,14 @@ public class BattleManager {
 
 
     public void resolveVictoryAndAdvance(Callback<VictoryResult> cb) {
-        final DocumentReference userDoc = db.collection("users").document(uid);
-        final CollectionReference eqCol = db.collection("users").document(uid).collection("equipment");
+        // Load catalog first to ensure drops use real items from catalog
+        new CatalogRepository().getAll(new CatalogRepository.Callback<java.util.List<Item>>() {
+            @Override public void onSuccess(@Nullable java.util.List<Item> data) {
+                final java.util.List<Item> catalog = (data == null) ? java.util.Collections.emptyList() : data;
+                final DocumentReference userDoc = db.collection("users").document(uid);
+                final CollectionReference invCol = db.collection("users").document(uid).collection("inventory");
 
-        db.runTransaction(tr -> {
+                db.runTransaction(tr -> {
                     DocumentSnapshot sd = tr.get(stateDoc());
                     if (!sd.exists()) throw new IllegalStateException("NO_BATTLE_STATE");
                     BattleState s = fromDoc(sd);
@@ -199,47 +207,59 @@ public class BattleManager {
 
                     double dropChance = 0.20;
                     if (s.halvedReward) dropChance *= 0.5;
-
                     boolean drop = new java.util.Random().nextDouble() < dropChance;
 
                     VictoryResult out = new VictoryResult();
                     out.coinsAwarded = reward;
 
-                    if (drop) {
-                        boolean weapon = new java.util.Random().nextInt(100) < 5;
-                        String name, type;
-                        double bonus;
-                        int charges;
-
-                        if (weapon) {
-                            name = "Mač (+5% PP)";
-                            type = "WEAPON";
-                            bonus = 0.05;
-                            charges = -1;
-                        } else {
-                            name = "Rukavice (+10% PP)";
-                            type = "CLOTHES";
-                            bonus = 0.10;
-                            charges = 2;
+                    if (drop && !catalog.isEmpty()) {
+                        java.util.List<Item> weapons = new ArrayList<>();
+                        java.util.List<Item> nonWeapons = new ArrayList<>();
+                        for (Item it : catalog) {
+                            if (it == null || it.id == null || it.type == null) continue;
+                            if (it.type == Item.Type.WEAPON) weapons.add(it);
+                            else nonWeapons.add(it);
                         }
 
-                        DocumentReference newEq = eqCol.document();
-                        Map<String, Object> m = new HashMap<>();
-                        m.put("name", name);
-                        m.put("type", type);
-                        m.put("effect", "INCREASE_PP");
-                        m.put("ppBonus", bonus);
-                        m.put("charges", charges);
-                        m.put("isActive", false);
-                        m.put("createdAt", FieldValue.serverTimestamp());
-                        tr.set(newEq, m);
+                        boolean weaponRoll = new java.util.Random().nextInt(100) < 5;
+                        Item chosen = null;
+                        java.util.Random rng = new java.util.Random();
+                        if (weaponRoll && !weapons.isEmpty()) {
+                            chosen = weapons.get(rng.nextInt(weapons.size()));
+                        } else if (!nonWeapons.isEmpty()) {
+                            chosen = nonWeapons.get(rng.nextInt(nonWeapons.size()));
+                        } else if (!weapons.isEmpty()) {
+                            chosen = weapons.get(rng.nextInt(weapons.size()));
+                        }
 
-                        out.equipmentDropped = true;
-                        out.equipmentDocId = newEq.getId();
-                        out.equipmentName = name;
-                        out.equipmentType = type;
-                        out.ppBonus = bonus;
-                        out.charges = charges;
+                        if (chosen != null) {
+                            if (chosen.type == Item.Type.WEAPON) {
+                                out.equipmentDropped = true;
+                                out.equipmentItemId = chosen.id;
+                                out.equipmentName = chosen.id;
+                                out.equipmentType = chosen.type.name();
+                            } else {
+                                DocumentReference invRef = invCol.document(chosen.id);
+                                DocumentSnapshot invDoc = tr.get(invRef);
+                                if (!invDoc.exists()) {
+                                    Map<String, Object> m = new HashMap<>();
+                                    m.put("itemId", chosen.id);
+                                    m.put("quantity", 1);
+                                    m.put("active", false);
+                                    m.put("remainingBattles", Math.max(0, chosen.durationBattles));
+                                    m.put("upgradeLevel", 0);
+                                    m.put("dropChance", 0.0);
+                                    tr.set(invRef, m);
+                                } else {
+                                    Long q = invDoc.getLong("quantity");
+                                    tr.update(invRef, "quantity", (q == null ? 0 : q) + 1);
+                                }
+                                out.equipmentDropped = true;
+                                out.equipmentItemId = chosen.id;
+                                out.equipmentName = chosen.id;
+                                out.equipmentType = chosen.type.name();
+                            }
+                        }
                     }
 
                     int nextIdx = s.currentBossIndex + 1;
@@ -261,7 +281,10 @@ public class BattleManager {
                     out.nextBossMaxHp = nextHp;
                     return out;
                 }).addOnSuccessListener(cb::onSuccess)
-                .addOnFailureListener(cb::onError);
+                  .addOnFailureListener(cb::onError);
+            }
+            @Override public void onError(Exception e) { cb.onError(e); }
+        });
     }
 
     public void save(BattleState s, Callback<Void> cb) {

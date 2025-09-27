@@ -5,4 +5,9 @@
         android:icon="@drawable/ic_person"
         android:title="Profil"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/action_equipment"
+        android:icon="@android:drawable/ic_menu_view"
+        android:title="Oprema"
+        app:showAsAction="ifRoom" />
 </menu>

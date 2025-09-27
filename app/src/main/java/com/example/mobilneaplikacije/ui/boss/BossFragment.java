@@ -22,12 +22,17 @@ import androidx.fragment.app.Fragment;
 import com.airbnb.lottie.LottieAnimationView;
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.manager.BattleManager;
+import com.example.mobilneaplikacije.data.model.ActiveItem;
 import com.example.mobilneaplikacije.data.model.dto.AttackResult;
 import com.example.mobilneaplikacije.data.model.dto.BattleState;
 import com.example.mobilneaplikacije.data.model.dto.VictoryResult;
 import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
+import com.example.mobilneaplikacije.data.repository.InventoryRepository;
+import com.example.mobilneaplikacije.ui.equipment.EquipmentSelectionFragment;
 import com.google.firebase.firestore.ListenerRegistration;
+
+import java.util.List;
 
 public class BossFragment extends Fragment implements SensorEventListener {
 
@@ -36,12 +41,14 @@ public class BossFragment extends Fragment implements SensorEventListener {
     private TextView tvBossHpValue, tvPlayerPpValue;
     private TextView tvSuccessRate, tvAttempts, tvBattleLog, tvCoins;
     private Button btnAttack;
+    private Button btnChooseEquipment;
     private LottieAnimationView lavChest;
     private View llRewards;
     private ListenerRegistration battleStateReg;
     private BattleManager battleManager;
     private PlayerRepository playerRepo;
     private TaskRepository taskRepo;
+    private InventoryRepository inventoryRepo;
 
     private SensorManager sensorManager;
     private Sensor accelerometer;
@@ -73,6 +80,7 @@ public class BossFragment extends Fragment implements SensorEventListener {
         tvBattleLog = view.findViewById(R.id.tvBattleLog);
         tvCoins = view.findViewById(R.id.tvCoins);
         btnAttack = view.findViewById(R.id.btnAttack);
+        btnChooseEquipment = view.findViewById(R.id.btnChooseEquipment);
         lavChest = view.findViewById(R.id.lavChest);
         llRewards = view.findViewById(R.id.llRewards);
         tvAttempts = view.findViewById(R.id.tvAttempts);
@@ -83,6 +91,7 @@ public class BossFragment extends Fragment implements SensorEventListener {
         playerRepo = new PlayerRepository();
         taskRepo = new TaskRepository();
         battleManager = new BattleManager();
+        inventoryRepo = new InventoryRepository();
 
         battleManager.loadOrInit(0L, new BattleManager.Callback<BattleState>() {
             @Override public void onSuccess(@Nullable BattleState state) {
@@ -92,10 +101,23 @@ public class BossFragment extends Fragment implements SensorEventListener {
 
                 playerRepo.getCurrentPP(new PlayerRepository.LongCallback() {
                     @Override public void onResult(long v) {
-                        playerPP = v;
-                        pbPlayerPp.setMax((int) Math.max(1, v));
-                        pbPlayerPp.setProgress((int) v);
-                        tvPlayerPpValue.setText(v + " PP");
+                        inventoryRepo.getCombatBonuses(new InventoryRepository.Callback<InventoryRepository.CombatBonuses>() {
+                            @Override public void onSuccess(InventoryRepository.CombatBonuses bonuses) {
+                                playerPP = Math.round(v * Math.max(1.0, bonuses.ppMultiplier));
+                                int adjHit = Math.max(0, Math.min(100, hitChance + bonuses.successAddPct));
+                                hitChance = adjHit;
+                                pbPlayerPp.setMax((int) Math.max(1, playerPP));
+                                pbPlayerPp.setProgress((int) playerPP);
+                                tvPlayerPpValue.setText(playerPP + " PP");
+                                tvSuccessRate.setText("Sansa za pogodak: " + hitChance + "%");
+                            }
+                            @Override public void onError(Exception e) {
+                                playerPP = v;
+                                pbPlayerPp.setMax((int) Math.max(1, v));
+                                pbPlayerPp.setProgress((int) v);
+                                tvPlayerPpValue.setText(v + " PP");
+                            }
+                        });
                     }
                     @Override public void onError(Exception e) {
                         playerPP = 0L;
@@ -111,6 +133,38 @@ public class BossFragment extends Fragment implements SensorEventListener {
                 });
 
                 btnAttack.setOnClickListener(v -> doAttack());
+                btnChooseEquipment.setOnClickListener(v -> {
+                    getParentFragmentManager()
+                            .beginTransaction()
+                            .replace(R.id.fragment_container, new EquipmentSelectionFragment())
+                            .addToBackStack(null)
+                            .commit();
+                });
+
+                inventoryRepo.listActive(new InventoryRepository.Callback<List<ActiveItem>>() {
+                    @Override public void onSuccess(List<ActiveItem> activeItemList) {
+                        View container = requireView().findViewById(R.id.llActiveEquipment);
+                        if (!(container instanceof ViewGroup)) return;
+                        ViewGroup vg = (ViewGroup) container;
+                        vg.removeAllViews();
+                        if (activeItemList == null || activeItemList.isEmpty()) {
+                            TextView tv = new TextView(requireContext());
+                            tv.setText("Nema aktivnih itema");
+                            vg.addView(tv);
+                            return;
+                        }
+                        for (var a : activeItemList) {
+                            TextView tv = new TextView(requireContext());
+                            tv.setText(a.itemId + " (" + (a.remainingBattles <= 0 ? "trajni" : (a.remainingBattles + " borbe")) + ")");
+                            tv.setBackgroundResource(R.drawable.bg_item_equipment);
+                            tv.setPadding(12, 8, 12, 8);
+                            ViewGroup.MarginLayoutParams lp = new ViewGroup.MarginLayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                            lp.setMargins(8, 8, 8, 8);
+                            vg.addView(tv, lp);
+                        }
+                    }
+                    @Override public void onError(Exception e) { }
+                });
             }
             @Override public void onError(Exception e) {
                 Toast.makeText(requireContext(), "Greška: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -166,6 +220,20 @@ public class BossFragment extends Fragment implements SensorEventListener {
                 if (ar.bossDefeated) {
                     battleManager.resolveVictoryAndAdvance(new BattleManager.Callback<VictoryResult>() {
                         @Override public void onSuccess(@Nullable VictoryResult vr) {
+                            inventoryRepo.updateDurationOfActiveItems(new InventoryRepository.Callback<Void>() {
+                                @Override public void onSuccess(Void data) { }
+                                @Override public void onError(Exception e) { }
+                            });
+                            // ako dropuje item oruzija promeni sanse
+                            if (vr != null && vr.equipmentDropped && "WEAPON".equals(vr.equipmentType)) {
+                                String droppedId = vr.equipmentItemId;
+                                if (droppedId != null) {
+                                    inventoryRepo.onBossWeaponDrop(droppedId, new InventoryRepository.Callback<Void>() {
+                                        @Override public void onSuccess(Void data) { }
+                                        @Override public void onError(Exception e) { }
+                                    });
+                                }
+                            }
                             unregisterShake();
                             long coins = (vr == null) ? 0 : vr.coinsAwarded;
 
@@ -186,6 +254,10 @@ public class BossFragment extends Fragment implements SensorEventListener {
                         }
                     });
                 } else if (ar.fightEnded) {
+                    inventoryRepo.updateDurationOfActiveItems(new InventoryRepository.Callback<Void>() {
+                        @Override public void onSuccess(Void data) { }
+                        @Override public void onError(Exception e) { }
+                    });
                     Toast.makeText(requireContext(),
                             "Okršaj završen. Nastavljaš nakon sledećeg pređenog nivoa.",
                             Toast.LENGTH_LONG).show();

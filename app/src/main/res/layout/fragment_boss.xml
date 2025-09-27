@@ -75,6 +75,14 @@
             android:textSize="16sp"
             android:layout_marginTop="8dp" />
 
+        <!-- Dugme za izbor opreme -->
+        <Button
+            android:id="@+id/btnChooseEquipment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Izaberi opremu"
+            android:layout_marginTop="12dp" />
+
         <!-- Dugme za napad -->
         <Button
             android:id="@+id/btnAttack"
@@ -92,7 +100,7 @@
             android:gravity="center"
             android:layout_marginTop="16dp" />
 
-        <!-- Oprema (trenutno ne koristimo) -->
+        <!-- Aktivni itemi -->
         <LinearLayout
             android:id="@+id/llActiveEquipment"
             android:layout_width="match_parent"
@@ -100,7 +108,7 @@
             android:orientation="horizontal"
             android:gravity="center"
             android:layout_marginTop="12dp"
-            android:visibility="gone" />
+            android:visibility="visible" />
 
         <!-- Lottie kovčeg -->
         <com.airbnb.lottie.LottieAnimationView

@@ -37,7 +37,7 @@
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etDescription"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="24dp"
                 android:inputType="textMultiLine"
                 android:minLines="3" />
         </com.google.android.material.textfield.TextInputLayout>
@@ -137,11 +137,11 @@
             android:id="@+id/btnSave"
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Sačuvaj zadatak"
+            android:layout_height="43dp"
+            android:layout_marginTop="16dp"
             android:backgroundTint="@color/buttonBlue"
-            android:textColor="@android:color/white"
-            android:layout_marginTop="16dp" />
+            android:text="Sačuvaj zadatak"
+            android:textColor="@android:color/white" />
 
     </LinearLayout>
 </ScrollView>

@@ -45,7 +45,7 @@ public class EquipmentAdapter extends RecyclerView.Adapter<EquipmentAdapter.View
         if (item.isActive()) {
             holder.btnActivate.setEnabled(false);
             holder.btnActivate.setText("Aktiviran");
-            holder.itemView.setAlpha(0.5f); // zasivljen card
+            holder.itemView.setAlpha(0.5f);
         } else {
             holder.btnActivate.setEnabled(true);
             holder.btnActivate.setText("Aktiviraj");

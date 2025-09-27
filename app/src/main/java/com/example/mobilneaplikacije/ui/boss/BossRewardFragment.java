@@ -28,6 +28,7 @@ import com.example.mobilneaplikacije.ui.task.TaskListFragment;
 
 import java.util.List;
 import java.util.Random;
+import java.util.Locale;
 
 public class BossRewardFragment extends Fragment implements SensorEventListener {
 
@@ -100,7 +101,7 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
 
             // 🔹 Ako je pala oprema iz back-end transakcije, prikaži je (bez lokalne lutrije)
             if (hasEquipment && eqName != null && eqType != null) {
-                int iconRes = "WEAPON".equals(eqType) ? R.drawable.ic_sword : R.drawable.ic_gloves;
+                int iconRes = resolveRewardIcon(eqType, eqName);
 
                 LinearLayout itemRow = new LinearLayout(requireContext());
                 itemRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -131,6 +132,36 @@ public class BossRewardFragment extends Fragment implements SensorEventListener 
                     .replace(R.id.fragment_container, new TaskListFragment())
                     .commit();
         });
+    }
+    private int resolveRewardIcon(@Nullable String type, @Nullable String name) {
+        String t = type == null ? "" : type.toUpperCase(Locale.ROOT);
+        String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        if ("WEAPON".equals(t)) {
+            if (n.contains("sword")) return R.drawable.sword;
+            if (n.contains("bow")) return R.drawable.bow;
+            if (n.contains("shield")) return R.drawable.shield;
+            return R.drawable.sword;
+        }
+        if ("CLOTHES".equals(t)) {
+            if (n.contains("gloves")) return R.drawable.gloves;
+            if (n.contains("boots")) return R.drawable.boots;
+            return R.drawable.gloves;
+        }
+        if ("POTION".equals(t)) {
+            if (n.startsWith("potion_pp_")) {
+                try {
+                    String numStr = n.substring("potion_pp_".length());
+                    int usIdx = numStr.indexOf('_');
+                    if (usIdx >= 0) numStr = numStr.substring(0, usIdx);
+                    int val = Integer.parseInt(numStr);
+                    if (val == 40) return R.drawable.potion_40;
+                    if (val == 20) return R.drawable.potion_20;
+                    if (val == 10) return R.drawable.potion_10_perm;
+                    if (val == 5) return R.drawable.potion_5_perm;
+                } catch (Exception ignored) {}
+            }
+        }
+        return R.drawable.ic_shop_placeholder;
     }
 
     @Override

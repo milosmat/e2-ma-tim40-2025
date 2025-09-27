@@ -23,6 +23,8 @@ import com.example.mobilneaplikacije.ui.boss.BossFragment;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.example.mobilneaplikacije.ui.shop.ShopFragment;
+import com.example.mobilneaplikacije.ui.equipment.EquipmentSelectionFragment;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -75,6 +77,12 @@ public class MainActivity extends AppCompatActivity {
                         .replace(R.id.fragment_container, new CategoryListFragment())
                         .commit();
                 return true;
+            } else if (id == R.id.nav_shop) {
+                getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.fragment_container, new ShopFragment())
+                        .commit();
+                return true;
             }
             return false;
         });
@@ -113,12 +121,18 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_profile) {
+    if (item.getItemId() == R.id.action_profile) {
             getSupportFragmentManager()
                     .beginTransaction()
                     .replace(R.id.fragment_container, new ProfileFragment())
                     .commit();
             return true;
+    } else if (item.getItemId() == R.id.action_equipment) {
+        getSupportFragmentManager()
+            .beginTransaction()
+            .replace(R.id.fragment_container, new EquipmentSelectionFragment())
+            .commit();
+        return true;
         }
         return super.onOptionsItemSelected(item);
     }

@@ -101,7 +101,7 @@ public class InventoryRepository {
                     DocumentReference invRef = invCol().document(item.id);
                     DocumentSnapshot existing = tr.get(invRef);
 
-                    if (!existing.exists()) { // dodaj ga u inventory ako InventoryItem
+                    if (!existing.exists()) {
                         Map<String, Object> m = new HashMap<>();
                         m.put("itemId", item.id);
                         m.put("quantity", 1);
@@ -158,16 +158,24 @@ public class InventoryRepository {
             batch.commit().addOnSuccessListener(v -> cb.onSuccess(null)).addOnFailureListener(cb::onError);
         }).addOnFailureListener(cb::onError);
     }
-
-    public void applyBossDropWeaponUpgrade(String itemId, boolean isSameTypeDrop, Callback<Void> cb) {
+    public void onBossWeaponDrop(String itemId, Callback<Void> cb) {
         db.runTransaction(tr -> {
             DocumentReference invRef = invCol().document(itemId);
             DocumentSnapshot doc = tr.get(invRef);
-            if (!doc.exists()) throw new IllegalStateException("WEAPON_NOT_OWNED");
-            Double ch = doc.getDouble("dropChance");
-            double cur = ch == null ? 0.0 : ch;
-            double add = isSameTypeDrop ? 0.0002 : 0.0;
-            tr.update(invRef, "dropChance", cur + add);
+            if (!doc.exists()) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("itemId", itemId);
+                m.put("quantity", 1);
+                m.put("active", false);
+                m.put("remainingBattles", 0);
+                m.put("upgradeLevel", 0);
+                m.put("dropChance", 0.0);
+                tr.set(invRef, m);
+            } else {
+                Double ch = doc.getDouble("dropChance");
+                double cur = ch == null ? 0.0 : ch;
+                tr.update(invRef, "dropChance", cur + 0.0002);
+            }
             return null;
         }).addOnSuccessListener(v -> cb.onSuccess(null)).addOnFailureListener(cb::onError);
     }
@@ -188,8 +196,13 @@ public class InventoryRepository {
                     DocumentSnapshot doc = tr.get(invRef);
                     if (!doc.exists()) throw new IllegalStateException("WEAPON_NOT_OWNED");
                     Long lvl = doc.getLong("upgradeLevel");
-                    int cur = lvl == null ? 0 : lvl.intValue();
-                    tr.update(invRef, "upgradeLevel", cur + 1);
+                    int currentLevel = lvl == null ? 0 : lvl.intValue();
+                    Double dc = doc.getDouble("dropChance");
+                    double currDropChance = dc == null ? 0.0 : dc;
+                    tr.update(invRef, new java.util.HashMap<String, Object>() {{
+                        put("upgradeLevel", currentLevel + 1);
+                        put("dropChance", currDropChance + 0.0001);
+                    }});
                     tr.update(uref, "coins", coins - price);
                     return null;
                 }).addOnSuccessListener(v -> cb.onSuccess(null)).addOnFailureListener(cb::onError);
@@ -240,7 +253,7 @@ public class InventoryRepository {
                             }
                         }
                     }
-                    // zbog upgrade oruzija
+                    // zbog upgrade oruzija i jer ne stoje u active items
                     invCol().get().addOnSuccessListener(iSnap -> {
                         for (DocumentSnapshot d : iSnap.getDocuments()) {
                             String iid = d.getString("itemId");
