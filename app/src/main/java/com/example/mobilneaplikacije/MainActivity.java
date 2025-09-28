@@ -25,6 +25,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.example.mobilneaplikacije.ui.shop.ShopFragment;
 import com.example.mobilneaplikacije.ui.equipment.EquipmentSelectionFragment;
+import com.example.mobilneaplikacije.ui.friends.FriendsFragment;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -131,6 +132,12 @@ public class MainActivity extends AppCompatActivity {
         getSupportFragmentManager()
             .beginTransaction()
             .replace(R.id.fragment_container, new EquipmentSelectionFragment())
+            .commit();
+        return true;
+    } else if (item.getItemId() == R.id.action_friends) {
+        getSupportFragmentManager()
+            .beginTransaction()
+            .replace(R.id.fragment_container, new FriendsFragment())
             .commit();
         return true;
         }
