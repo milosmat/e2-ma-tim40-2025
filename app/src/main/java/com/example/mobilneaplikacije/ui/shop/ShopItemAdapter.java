@@ -94,11 +94,11 @@ public class ShopItemAdapter extends RecyclerView.Adapter<ShopItemAdapter.VH> {
             case WEAPON:
                 if (idName.contains("sword")) return R.drawable.sword;
                 if (idName.contains("bow")) return R.drawable.bow;
-                if (idName.contains("shield")) return R.drawable.shield;
                 return R.drawable.sword;
             case CLOTHES:
                 if (idName.contains("gloves")) return R.drawable.gloves;
                 if (idName.contains("boots")) return R.drawable.boots;
+                if (idName.contains("shield")) return R.drawable.shield;
                 return R.drawable.gloves;
             case POTION:
                 if (idName.startsWith("potion_pp_")) {

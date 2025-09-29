@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.UserPublic;
+import com.example.mobilneaplikacije.ui.profile.PublicProfileFragment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -103,6 +104,17 @@ public class FriendsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             tvInfo.setText(subtitle.toString().trim());
             int avatarRes = itemView.getResources().getIdentifier(u.avatar == null ? "ic_person" : u.avatar, "drawable", itemView.getContext().getPackageName());
             if (avatarRes != 0) iv.setImageResource(avatarRes);
+
+            itemView.setOnClickListener(v -> {
+                androidx.fragment.app.FragmentActivity act = (androidx.fragment.app.FragmentActivity) v.getContext();
+                try {
+                    PublicProfileFragment f = PublicProfileFragment.newInstance(u.uid);
+                    act.getSupportFragmentManager().beginTransaction()
+                            .replace(com.example.mobilneaplikacije.R.id.fragment_container, f)
+                            .addToBackStack(null)
+                            .commit();
+                } catch (Exception ignored) {}
+            });
 
             if ("friend".equals(u.status)) {
                 btn.setVisibility(View.GONE);

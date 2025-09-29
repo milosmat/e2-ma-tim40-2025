@@ -17,6 +17,7 @@ import com.example.mobilneaplikacije.data.model.Alliance;
 import com.example.mobilneaplikacije.data.model.UserPublic;
 import com.example.mobilneaplikacije.data.repository.AllianceRepository;
 import com.example.mobilneaplikacije.ui.alliance.AllianceChatFragment;
+import com.example.mobilneaplikacije.ui.profile.PublicProfileFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
@@ -59,11 +60,13 @@ public class AllianceDetailsDialog extends DialogFragment {
                 List<String> names = new ArrayList<>();
                 String leaderUid = (String) tvLeader.getTag();
                 String leaderName = null;
+                final List<UserPublic> membersCopy = new ArrayList<>();
                 if (members != null) {
                     for (UserPublic u : members) {
                         if (u == null) continue;
                         if (leaderUid != null && leaderUid.equals(u.uid)) leaderName = u.username;
                         names.add(u.username != null ? u.username : u.uid);
+                        membersCopy.add(u);
                     }
                 }
                 if (leaderName != null) tvLeader.setText("Vlasnik: " + leaderName);
@@ -71,6 +74,19 @@ public class AllianceDetailsDialog extends DialogFragment {
                 adapter.clear();
                 adapter.addAll(names);
                 adapter.notifyDataSetChanged();
+
+                lvMembers.setOnItemClickListener((parent, view, position, id) -> {
+                    if (position < 0 || position >= membersCopy.size()) return;
+                    UserPublic sel = membersCopy.get(position);
+                    if (getActivity() != null && sel != null && sel.uid != null) {
+                        PublicProfileFragment f = PublicProfileFragment.newInstance(sel.uid);
+                        getActivity().getSupportFragmentManager().beginTransaction()
+                                .replace(R.id.fragment_container, f)
+                                .addToBackStack(null)
+                                .commit();
+                        dismiss();
+                    }
+                });
             }
             @Override public void onError(Exception e) {  }
         });

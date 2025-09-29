@@ -5,6 +5,14 @@
     android:padding="12dp"
     android:background="@drawable/bg_item_equipment">
 
+    <ImageView
+        android:id="@+id/ivIcon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:src="@drawable/ic_shop_placeholder"
+        android:layout_gravity="start"
+        android:layout_marginBottom="8dp"/>
+
     <TextView
         android:id="@+id/tvName"
         android:layout_width="match_parent"

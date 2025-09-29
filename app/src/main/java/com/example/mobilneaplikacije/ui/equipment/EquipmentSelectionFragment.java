@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -20,6 +21,7 @@ import com.example.mobilneaplikacije.data.model.InventoryItem;
 import com.example.mobilneaplikacije.data.model.Item;
 import com.example.mobilneaplikacije.data.repository.CatalogRepository;
 import com.example.mobilneaplikacije.data.repository.InventoryRepository;
+// Boss fight se ne startuje odavde; nema navigacije ka BossFragment-u
 
 import java.util.*;
 
@@ -151,22 +153,28 @@ public class EquipmentSelectionFragment extends Fragment {
         @Override public void onBindViewHolder(@NonNull ActiveVH h, int pos) {
             var a = data.get(pos);
             Item ci = byId.get(a.itemId);
-            String name = ci != null ? ci.name : a.itemId;
-            h.bind(name, a.remainingBattles);
+            h.bind(ci, a.remainingBattles);
         }
         @Override public int getItemCount() { return data.size(); }
     }
 
     static class ActiveVH extends RecyclerView.ViewHolder {
-        TextView tvName, tvEffect, tvDuration; Button btnActivate;
+        TextView tvName, tvEffect, tvDuration; Button btnActivate; ImageView ivIcon;
         ActiveVH(@NonNull View v) { super(v); tvName = v.findViewById(R.id.tvName);
             tvEffect = v.findViewById(R.id.tvEffect); tvDuration = v.findViewById(R.id.tvDuration);
-            btnActivate = v.findViewById(R.id.btnActivate);
+            btnActivate = v.findViewById(R.id.btnActivate); ivIcon = v.findViewById(R.id.ivIcon);
             btnActivate.setVisibility(View.GONE); }
-        void bind(String name, int remaining) {
+        void bind(Item item, int remaining) {
+            String name = item != null ? item.name : "";
             tvName.setText(name);
             tvEffect.setText("");
             tvDuration.setText(remaining <= 0 ? "Trajno" : ("Preostalo borbi: " + remaining));
+            if (ivIcon != null && item != null) {
+                int res = itemView.getResources().getIdentifier(
+                        item.imageResName == null ? "ic_shop_placeholder" : item.imageResName,
+                        "drawable", itemView.getContext().getPackageName());
+                if (res != 0) ivIcon.setImageResource(res);
+            }
         }
     }
 
@@ -186,25 +194,32 @@ public class EquipmentSelectionFragment extends Fragment {
         @Override public void onBindViewHolder(@NonNull InventoryVH h, int pos) {
             InventoryItem inv = data.get(pos);
             Item i = byId.get(inv.itemId);
-            String name = i != null ? i.name : inv.itemId;
-            String effect = i != null ? i.effect.name() : "";
             int dur = i != null ? (i.type == Item.Type.CLOTHES ? 2 : i.durationBattles) : 0;
-            h.bind(name, effect, dur, inv, listener);
+            h.bind(i, dur, inv, listener);
         }
         @Override public int getItemCount() { return data.size(); }
     }
 
     static class InventoryVH extends RecyclerView.ViewHolder {
-        TextView tvName, tvEffect, tvDuration; Button btnActivate;
+        TextView tvName, tvEffect, tvDuration; Button btnActivate; ImageView ivIcon;
         InventoryVH(@NonNull View v) { super(v);
             tvName = v.findViewById(R.id.tvName);
             tvEffect = v.findViewById(R.id.tvEffect);
             tvDuration = v.findViewById(R.id.tvDuration);
-            btnActivate = v.findViewById(R.id.btnActivate); }
-        void bind(String name, String effect, int duration, InventoryItem inv, InventoryAdapter.Listener l) {
+            btnActivate = v.findViewById(R.id.btnActivate);
+            ivIcon = v.findViewById(R.id.ivIcon); }
+        void bind(Item item, int duration, InventoryItem inv, InventoryAdapter.Listener l) {
+            String name = item != null ? item.name : inv.itemId;
+            String effect = item != null && item.effect != null ? item.effect.name() : "";
             tvName.setText(name);
             tvEffect.setText("Efekat: " + effect);
             tvDuration.setText(duration <= 0 ? "Jednokratno" : ("Traje " + duration + " borbi"));
+            if (ivIcon != null && item != null) {
+                int res = itemView.getResources().getIdentifier(
+                        item.imageResName == null ? "ic_shop_placeholder" : item.imageResName,
+                        "drawable", itemView.getContext().getPackageName());
+                if (res != 0) ivIcon.setImageResource(res);
+            }
             btnActivate.setText("Aktiviraj");
             btnActivate.setOnClickListener(v -> l.onActivate(inv));
         }
@@ -231,24 +246,31 @@ public class EquipmentSelectionFragment extends Fragment {
         @Override public void onBindViewHolder(@NonNull WeaponsVH h, int pos) {
             InventoryItem inv = data.get(pos);
             Item i = byId.get(inv.itemId);
-            String name = i != null ? i.name : inv.itemId;
-            String effect = i != null ? i.effect.name() : "";
             long price = (long) Math.round((double) anchorCoins * 0.60);
-            h.bind(name, effect, inv, price, listener);
+            h.bind(i, inv, price, listener);
         }
         @Override public int getItemCount() { return data.size(); }
     }
 
     static class WeaponsVH extends RecyclerView.ViewHolder {
-        TextView tvName, tvEffect, tvDuration; Button btnActivate;
+        TextView tvName, tvEffect, tvDuration; Button btnActivate; ImageView ivIcon;
         WeaponsVH(@NonNull View v) { super(v); tvName = v.findViewById(R.id.tvName);
             tvEffect = v.findViewById(R.id.tvEffect);
             tvDuration = v.findViewById(R.id.tvDuration);
-            btnActivate = v.findViewById(R.id.btnActivate); }
-        void bind(String name, String effect, InventoryItem inv, long price, WeaponsAdapter.Listener l) {
+            btnActivate = v.findViewById(R.id.btnActivate);
+            ivIcon = v.findViewById(R.id.ivIcon); }
+        void bind(Item item, InventoryItem inv, long price, WeaponsAdapter.Listener l) {
+            String name = item != null ? item.name : inv.itemId;
+            String effect = item != null && item.effect != null ? item.effect.name() : "";
             tvName.setText(name + " (Lvl " + inv.upgradeLevel + ")");
             tvEffect.setText("Efekat: " + effect);
             tvDuration.setText("Trajan bonus");
+            if (ivIcon != null && item != null) {
+                int res = itemView.getResources().getIdentifier(
+                        item.imageResName == null ? "ic_shop_placeholder" : item.imageResName,
+                        "drawable", itemView.getContext().getPackageName());
+                if (res != 0) ivIcon.setImageResource(res);
+            }
             btnActivate.setText("Unapredi (" + price + ")");
             btnActivate.setOnClickListener(v -> l.onUpgrade(inv));
         }

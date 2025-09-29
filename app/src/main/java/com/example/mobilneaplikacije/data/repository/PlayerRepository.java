@@ -1,12 +1,20 @@
 package com.example.mobilneaplikacije.data.repository;
 
 import com.example.mobilneaplikacije.data.manager.LevelManager;
+import com.example.mobilneaplikacije.data.model.Item;
 import com.example.mobilneaplikacije.data.model.Player;
+import com.example.mobilneaplikacije.data.model.PublicProfile;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class PlayerRepository {
     private final FirebaseFirestore db;
@@ -17,6 +25,7 @@ public class PlayerRepository {
     public interface LongCallback { void onResult(long v); void onError(Exception e); }
     public interface VoidCallback { void onSuccess(); void onError(Exception e); }
     public interface PlayerCallback { void onSuccess(Player player); void onFailure(Exception e); }
+    public interface PublicProfileCallback { void onSuccess(com.example.mobilneaplikacije.data.model.PublicProfile p); void onFailure(Exception e); }
 
     public PlayerRepository(){
         db = FirebaseFirestore.getInstance();
@@ -72,6 +81,58 @@ public class PlayerRepository {
                 .addOnFailureListener(callback::onFailure);
     }
 
+    public void loadPublicProfile(String targetUid, final PublicProfileCallback cb) {
+        db.collection("users").document(targetUid).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc == null || !doc.exists()) {
+                        if (cb != null) cb.onFailure(new Exception("User not found"));
+                        return;
+                    }
+
+                    PublicProfile p = new PublicProfile();
+                    p.uid = targetUid != null ? targetUid : "";
+                    p.username = doc.getString("username") != null ? doc.getString("username") : "";
+                    p.avatar = doc.getString("avatar") != null ? doc.getString("avatar") : "";
+                    Long lvl = doc.getLong("level");
+                    p.level = (lvl != null) ? lvl.intValue() : 1;
+                    p.title = doc.getString("title") != null ? doc.getString("title") : "";
+
+                    Long xp = doc.getLong("xp");
+                    p.xp = (xp != null) ? xp.intValue() : 0;
+                    db.collection("users").document(targetUid).collection("activeItems").get()
+                            .addOnSuccessListener(as -> {
+                                List<String> activeItemIds = new ArrayList<>();
+                                for (DocumentSnapshot a : as) {
+                                    String iid = a.getString("itemId");
+                                    if (iid != null) activeItemIds.add(iid);
+                                }
+                                if (activeItemIds.isEmpty()) {
+                                    if (cb != null) cb.onSuccess(p);
+                                    return;
+                                }
+                                new CatalogRepository().getAll(new CatalogRepository.Callback<List<Item>>() {
+                                    @Override public void onSuccess(@androidx.annotation.Nullable List<Item> data) {
+                                        Map<String, Item> map = new HashMap<>();
+                                        if (data != null) for (Item it : data) map.put(it.id, it);
+                                        for (String iid : activeItemIds) {
+                                            Item it = map.get(iid);
+                                            if (it != null) p.activeItems.add(it);
+                                        }
+                                        if (cb != null) cb.onSuccess(p);
+                                    }
+                                    @Override public void onError(Exception e) {
+                                        if (cb != null) cb.onSuccess(p);
+                                    }
+                                });
+                            })
+                            .addOnFailureListener(e -> {
+                                if (cb != null) cb.onSuccess(p);
+                            });
+                })
+                .addOnFailureListener(e -> {
+                    if (cb != null) cb.onFailure(e);
+                });
+    }
     public void syncWithDatabase() {
         String uid;
         try {
