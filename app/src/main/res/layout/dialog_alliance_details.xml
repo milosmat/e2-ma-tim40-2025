@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/tvAllianceName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Savez"
+        android:textStyle="bold"
+        android:textSize="18sp" />
+
+    <TextView
+        android:id="@+id/tvAllianceLeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Vlasnik: "
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Članovi:"
+        android:layout_marginTop="8dp"
+        android:textStyle="bold" />
+
+    <ListView
+        android:id="@+id/lvMembers"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"/>
+
+    <TextView
+        android:id="@+id/tvEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Nema članova"
+        android:gravity="center"
+        android:visibility="gone"/>
+
+</LinearLayout>
