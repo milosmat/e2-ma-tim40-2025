@@ -23,6 +23,8 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 
 import java.util.*;
+import com.google.firebase.firestore.Query;
+import com.example.mobilneaplikacije.data.model.AllianceMessage;
 
 public class AllianceRepository {
     public interface Callback<T> { void onSuccess(@Nullable T data); void onError(Exception e); }
@@ -49,6 +51,7 @@ public class AllianceRepository {
 
     private CollectionReference allianceCol() { return db.collection("alliances"); }
     private DocumentReference userDoc(String uid) { return db.collection("users").document(uid); }
+    private com.google.firebase.firestore.CollectionReference messagesCol(String allianceId) { return allianceCol().document(allianceId).collection("messages"); }
 
     public void createAlliance(String name, Callback<String> cb) {
         userDoc(uid).get().addOnSuccessListener(userSnap -> {
@@ -289,6 +292,40 @@ public class AllianceRepository {
                 boolean isLeader = uid.equals(al.leaderUid);
                 cb.onSuccess(new AllianceInfo(allianceId, al, isLeader));
             }).addOnFailureListener(cb::onError);
+        }).addOnFailureListener(cb::onError);
+    }
+
+    public void listMessages(String allianceId, Callback<List<AllianceMessage>> cb) {
+        messagesCol(allianceId).orderBy("createdAt", Query.Direction.ASCENDING).get()
+                .addOnSuccessListener(qs -> {
+                    List<AllianceMessage> list = new ArrayList<>();
+                    for (DocumentSnapshot d : qs) {
+                        list.add(new AllianceMessage(
+                                d.getId(),
+                                allianceId,
+                                d.getString("senderUid"),
+                                d.getString("senderUsername"),
+                                d.getString("text"),
+                                d.getDate("createdAt")
+                        ));
+                    }
+                    cb.onSuccess(list);
+                })
+                .addOnFailureListener(cb::onError);
+    }
+
+    public void sendMessage(String allianceId, String text, Callback<Void> cb) {
+        if (text == null || text.trim().isEmpty()) { cb.onError(new IllegalArgumentException("EMPTY")); return; }
+        userDoc(uid).get().addOnSuccessListener(u -> {
+            String username = u.getString("username");
+            Map<String, Object> data = new HashMap<>();
+            data.put("senderUid", uid);
+            data.put("senderUsername", username);
+            data.put("text", text.trim());
+            data.put("createdAt", FieldValue.serverTimestamp());
+            messagesCol(allianceId).add(data)
+                    .addOnSuccessListener(doc -> cb.onSuccess(null))
+                    .addOnFailureListener(cb::onError);
         }).addOnFailureListener(cb::onError);
     }
 }

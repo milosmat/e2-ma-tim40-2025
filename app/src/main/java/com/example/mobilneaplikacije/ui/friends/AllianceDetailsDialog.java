@@ -16,6 +16,7 @@ import com.example.mobilneaplikacije.R;
 import com.example.mobilneaplikacije.data.model.Alliance;
 import com.example.mobilneaplikacije.data.model.UserPublic;
 import com.example.mobilneaplikacije.data.repository.AllianceRepository;
+import com.example.mobilneaplikacije.ui.alliance.AllianceChatFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
@@ -74,9 +75,18 @@ public class AllianceDetailsDialog extends DialogFragment {
             @Override public void onError(Exception e) {  }
         });
 
-        return new MaterialAlertDialogBuilder(requireContext())
-                .setView(v)
-                .setPositiveButton("Zatvori", (d,w) -> dismiss())
-                .create();
+    return new MaterialAlertDialogBuilder(requireContext())
+        .setView(v)
+        .setPositiveButton("Zatvori", (d,w) -> dismiss())
+        .setNeutralButton("Chat", (d,w) -> {
+            if (getActivity() != null) {
+            getActivity().getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.fragment_container, AllianceChatFragment.newInstance(allianceId))
+                .addToBackStack(null)
+                .commit();
+            }
+        })
+        .create();
     }
 }
