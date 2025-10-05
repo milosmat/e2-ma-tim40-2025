@@ -34,6 +34,7 @@ import com.example.mobilneaplikacije.ui.shop.ShopFragment;
 import com.example.mobilneaplikacije.ui.task.AddTaskFragment;
 import com.example.mobilneaplikacije.ui.task.TaskCalendarFragment;
 import com.example.mobilneaplikacije.ui.task.TaskListFragment;
+import com.example.mobilneaplikacije.ui.mission.SpecialMissionFragment;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.firebase.auth.FirebaseAuth;
@@ -173,6 +174,12 @@ public class MainActivity extends AppCompatActivity {
             getSupportFragmentManager()
                     .beginTransaction()
                     .replace(R.id.fragment_container, new FriendsFragment())
+                    .commit();
+            return true;
+        } else if (item.getItemId() == R.id.action_special_mission) {
+            getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.fragment_container, new SpecialMissionFragment())
                     .commit();
             return true;
         }

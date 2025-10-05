@@ -25,7 +25,6 @@ public class ColorPickerDialogFragment extends DialogFragment {
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
-        // parent fragment može implementirati listener
         if (getParentFragment() instanceof OnColorPickedListener) {
             listener = (OnColorPickedListener) getParentFragment();
         } else if (context instanceof OnColorPickedListener) {
