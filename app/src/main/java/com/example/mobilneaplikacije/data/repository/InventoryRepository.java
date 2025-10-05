@@ -118,7 +118,13 @@ public class InventoryRepository {
 
                     tr.update(uref, "coins", coins - price);
                     return null;
-                }).addOnSuccessListener(v -> cb.onSuccess(null)).addOnFailureListener(cb::onError);
+                }).addOnSuccessListener(v -> {
+                    try {
+                        new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                .recordShopPurchaseForMyAlliance(null);
+                    } catch (Exception ignored) { }
+                    cb.onSuccess(null);
+                }).addOnFailureListener(cb::onError);
             }
             @Override public void onError(Exception e) { cb.onError(e); }
         });

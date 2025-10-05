@@ -282,19 +282,22 @@ public class TaskRepository {
                     int extHard = safeInt(wSnap.getLong("extHard"));
                     int special = safeInt(mSnap.getLong("special"));
 
-                    boolean allowed = true;
+                    boolean allowedDiff = true;
+                    boolean allowedImp  = true;
 
-                    if ("VEOMA_LAK".equals(diffN) && veryEasy >= 5) allowed = false;
-                    if ("LAK".equals(diffN) && easy >= 5) allowed = false;
-                    if ("TEZAK".equals(diffN) && hard >= 2) allowed = false;
-                    if ("EKSTREMNO_TEZAK".equals(diffN) && extHard >= 1) allowed = false;
+                    if ("VEOMA_LAK".equals(diffN) && veryEasy >= 5) allowedDiff = false;
+                    if ("LAK".equals(diffN) && easy >= 5) allowedDiff = false;
+                    if ("TEZAK".equals(diffN) && hard >= 2) allowedDiff = false;
+                    if ("EKSTREMNO_TEZAK".equals(diffN) && extHard >= 1) allowedDiff = false;
 
-                    if ("NORMALAN".equals(impN) && normal >= 5) allowed = false;
-                    if ("VAZAN".equals(impN) && important >= 5) allowed = false;
-                    if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2)allowed = false;
-                    if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
+                    if ("NORMALAN".equals(impN) && normal >= 5) allowedImp = false;
+                    if ("VAZAN".equals(impN) && important >= 5) allowedImp = false;
+                    if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2) allowedImp = false;
+                    if ("SPECIJALAN".equals(impN) && special >= 1) allowedImp = false;
 
-                    int awardXp = allowed ? baseXp : 0;
+                    int diffXp = xpForDifficulty(diffN);
+                    int impXp  = xpForImportance(impN);
+                    int awardXp = (allowedDiff ? diffXp : 0) + (allowedImp ? impXp : 0);
 
                     tr.update(occRef, "status", "DONE", "updatedAt", FieldValue.serverTimestamp());
                     Map<String, Object> log = new HashMap<>();
@@ -306,31 +309,39 @@ public class TaskRepository {
                     log.put("xpAwarded", awardXp);
                     tr.set(logsCol().document(), log);
 
-                    if (allowed) {
-                        Map<String, Object> dayUpd = new HashMap<>();
+                    Map<String, Object> dayUpd = new HashMap<>();
+                    if (allowedDiff) {
                         if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
                         if ("LAK".equals(diffN)) dayUpd.put("easy", easy + 1);
                         if ("TEZAK".equals(diffN)) dayUpd.put("hard", hard + 1);
-
+                    }
+                    if (allowedImp) {
                         if ("NORMALAN".equals(impN)) dayUpd.put("normal", normal + 1);
                         if ("VAZAN".equals(impN)) dayUpd.put("important", important + 1);
                         if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
+                    }
+                    if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
 
-                        if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
-
-                        if ("EKSTREMNO_TEZAK".equals(diffN)) {
-                            Map<String, Object> wUpd = new HashMap<>();
-                            wUpd.put("extHard", extHard + 1);
-                            tr.set(wRef, wUpd, SetOptions.merge());
-                        }
-                        if ("SPECIJALAN".equals(impN)) {
-                            Map<String, Object> mUpd = new HashMap<>();
-                            mUpd.put("special", special + 1);
-                            tr.set(mRef, mUpd, SetOptions.merge());
-                        }
+                    if (allowedDiff && "EKSTREMNO_TEZAK".equals(diffN)) {
+                        Map<String, Object> wUpd = new HashMap<>();
+                        wUpd.put("extHard", extHard + 1);
+                        tr.set(wRef, wUpd, SetOptions.merge());
+                    }
+                    if (allowedImp && "SPECIJALAN".equals(impN)) {
+                        Map<String, Object> mUpd = new HashMap<>();
+                        mUpd.put("special", special + 1);
+                        tr.set(mRef, mUpd, SetOptions.merge());
                     }
                     return null;
-                }).addOnSuccessListener(cb::onSuccess)
+                }).addOnSuccessListener(v -> {
+                    try {
+                        new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                .recordTaskCompletionAuto(difficulty, importance, null);
+                        new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                .tryApplyNoUnresolvedBonusForMyAlliance(null);
+                    } catch (Exception ignored) { }
+                    cb.onSuccess(v);
+                })
                 .addOnFailureListener(cb::onError);
     }
 
@@ -372,18 +383,21 @@ public class TaskRepository {
                     int extHard = safeInt(wSnap.getLong("extHard"));
                     int special = safeInt(mSnap.getLong("special"));
 
-                    boolean allowed = true;
-                    if ("VEOMA_LAK".equals(diffN) && veryEasy >= 5) allowed = false;
-                    if ("LAK".equals(diffN) && easy >= 5) allowed = false;
-                    if ("TEZAK".equals(diffN) && hard >= 2) allowed = false;
-                    if ("EKSTREMNO_TEZAK".equals(diffN) && extHard >= 1) allowed = false;
+                    boolean allowedDiff = true;
+                    boolean allowedImp  = true;
+                    if ("VEOMA_LAK".equals(diffN) && veryEasy >= 5) allowedDiff = false;
+                    if ("LAK".equals(diffN) && easy >= 5) allowedDiff = false;
+                    if ("TEZAK".equals(diffN) && hard >= 2) allowedDiff = false;
+                    if ("EKSTREMNO_TEZAK".equals(diffN) && extHard >= 1) allowedDiff = false;
 
-                    if ("NORMALAN".equals(impN) && normal >= 5) allowed = false;
-                    if ("VAZAN".equals(impN) && important >= 5) allowed = false;
-                    if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2) allowed = false;
-                    if ("SPECIJALAN".equals(impN) && special >= 1) allowed = false;
+                    if ("NORMALAN".equals(impN) && normal >= 5) allowedImp = false;
+                    if ("VAZAN".equals(impN) && important >= 5) allowedImp = false;
+                    if ("EKSTREMNO_VAZAN".equals(impN) && extImportant >= 2) allowedImp = false;
+                    if ("SPECIJALAN".equals(impN) && special >= 1) allowedImp = false;
 
-                    int awardXp = allowed ? baseXp : 0;
+                    int diffXp = xpForDifficulty(diffN);
+                    int impXp  = xpForImportance(impN);
+                    int awardXp = (allowedDiff ? diffXp : 0) + (allowedImp ? impXp : 0);
 
                     tr.update(tRef, "status", "DONE", "updatedAt", FieldValue.serverTimestamp());
 
@@ -396,33 +410,56 @@ public class TaskRepository {
                     log.put("xpAwarded", awardXp);
                     tr.set(logsCol().document(), log);
 
-                    if (allowed) {
-                        Map<String, Object> dayUpd = new HashMap<>();
+                    Map<String, Object> dayUpd = new HashMap<>();
+                    if (allowedDiff) {
                         if ("VEOMA_LAK".equals(diffN)) dayUpd.put("veryEasy", veryEasy + 1);
                         if ("LAK".equals(diffN)) dayUpd.put("easy", easy + 1);
                         if ("TEZAK".equals(diffN)) dayUpd.put("hard", hard + 1);
-
+                    }
+                    if (allowedImp) {
                         if ("NORMALAN".equals(impN)) dayUpd.put("normal", normal + 1);
                         if ("VAZAN".equals(impN)) dayUpd.put("important", important + 1);
                         if ("EKSTREMNO_VAZAN".equals(impN)) dayUpd.put("extImportant", extImportant + 1);
+                    }
+                    if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
 
-                        if (!dayUpd.isEmpty()) tr.set(dRef, dayUpd, SetOptions.merge());
-
-                        if ("EKSTREMNO_TEZAK".equals(diffN)) {
-                            Map<String, Object> wUpd = new HashMap<>();
-                            wUpd.put("extHard", extHard + 1);
-                            tr.set(wRef, wUpd, SetOptions.merge());
-                        }
-                        if ("SPECIJALAN".equals(impN)) {
-                            Map<String, Object> mUpd = new HashMap<>();
-                            mUpd.put("special", special + 1);
-                            tr.set(mRef, mUpd, SetOptions.merge());
-                        }
+                    if (allowedDiff && "EKSTREMNO_TEZAK".equals(diffN)) {
+                        Map<String, Object> wUpd = new HashMap<>();
+                        wUpd.put("extHard", extHard + 1);
+                        tr.set(wRef, wUpd, SetOptions.merge());
+                    }
+                    if (allowedImp && "SPECIJALAN".equals(impN)) {
+                        Map<String, Object> mUpd = new HashMap<>();
+                        mUpd.put("special", special + 1);
+                        tr.set(mRef, mUpd, SetOptions.merge());
                     }
 
                     return null;
-                }).addOnSuccessListener(cb::onSuccess)
+                }).addOnSuccessListener(v -> {
+                    try {
+                        new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                .recordTaskCompletionAuto(difficulty, importance, null);
+                        new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                .tryApplyNoUnresolvedBonusForMyAlliance(null);
+                    } catch (Exception ignored) { }
+                    cb.onSuccess(v);
+                })
                 .addOnFailureListener(cb::onError);
+    }
+
+    private static int xpForDifficulty(String diff) {
+        if ("VEOMA_LAK".equals(diff)) return 1;
+        if ("LAK".equals(diff)) return 3;
+        if ("TEZAK".equals(diff)) return 7;
+        if ("EKSTREMNO_TEZAK".equals(diff)) return 20;
+        return 0;
+    }
+    private static int xpForImportance(String imp) {
+        if ("NORMALAN".equals(imp)) return 1;
+        if ("VAZAN".equals(imp)) return 3;
+        if ("EKSTREMNO_VAZAN".equals(imp)) return 10;
+        if ("SPECIJALAN".equals(imp)) return 100;
+        return 0;
     }
     public void cancelOccurrence(String taskId, String occId, Callback<Void> cb) {
         occCol(taskId).document(occId)

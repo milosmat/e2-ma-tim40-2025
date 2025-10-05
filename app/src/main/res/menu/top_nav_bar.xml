@@ -15,4 +15,9 @@
         android:icon="@android:drawable/ic_menu_share"
         android:title="Prijatelji"
         app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_special_mission"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:title="Spec. misija"
+        app:showAsAction="never" />
 </menu>

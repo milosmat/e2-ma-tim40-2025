@@ -206,7 +206,15 @@ public class TaskDetailFragment extends Fragment {
                                                                         .addToBackStack(null)
                                                                         .commit();
                                                             });
-                                                            Toast.makeText(getContext(),"Urađeno! +" + awarded + " XP",Toast.LENGTH_LONG).show();
+                                                            if (awarded == totalXp) {
+                                                                Toast.makeText(getContext(), "Urađeno! +" + awarded + " XP", Toast.LENGTH_LONG).show();
+                                                            } else if (awarded == diffXp && impXp > 0) {
+                                                                Toast.makeText(getContext(), "Delimično obračunato: +" + awarded + " XP (obračunata težina, bitnost preko kvote)", Toast.LENGTH_LONG).show();
+                                                            } else if (awarded == impXp && diffXp > 0) {
+                                                                Toast.makeText(getContext(), "Delimično obračunato: +" + awarded + " XP (obračunata bitnost, težina preko kvote)", Toast.LENGTH_LONG).show();
+                                                            } else {
+                                                                Toast.makeText(getContext(), "Urađeno! +" + awarded + " XP", Toast.LENGTH_LONG).show();
+                                                            }
                                                         } else {
                                                             Toast.makeText(getContext(),"Urađeno! (bez XP, pređena kvota)",Toast.LENGTH_LONG).show();
                                                         }

@@ -324,7 +324,13 @@ public class AllianceRepository {
             data.put("text", text.trim());
             data.put("createdAt", FieldValue.serverTimestamp());
             messagesCol(allianceId).add(data)
-                    .addOnSuccessListener(doc -> cb.onSuccess(null))
+                    .addOnSuccessListener(doc -> {
+                        try {
+                            new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                    .recordAllianceMessageDay(allianceId, null);
+                        } catch (Exception ignored) { }
+                        cb.onSuccess(null);
+                    })
                     .addOnFailureListener(cb::onError);
         }).addOnFailureListener(cb::onError);
     }

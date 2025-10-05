@@ -208,6 +208,18 @@ public class BossFragment extends Fragment implements SensorEventListener {
                 if (ar.hit) {
                     showBossHit();
                     tvBattleLog.setText(getString(R.string.boss_hit, ar.damageApplied));
+                    try {
+                        new com.example.mobilneaplikacije.data.repository.AllianceRepository()
+                                .getMyAllianceInfo(new com.example.mobilneaplikacije.data.repository.AllianceRepository.Callback<com.example.mobilneaplikacije.data.repository.AllianceRepository.AllianceInfo>() {
+                                    @Override public void onSuccess(com.example.mobilneaplikacije.data.repository.AllianceRepository.AllianceInfo info) {
+                                        if (info != null && info.allianceId != null) {
+                                            new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
+                                                    .recordRegularBossHit(info.allianceId, null);
+                                        }
+                                    }
+                                    @Override public void onError(Exception e) { }
+                                });
+                    } catch (Exception ignored) { }
                 } else {
                     showBossAttack();
                     tvBattleLog.setText(getString(R.string.boss_miss));
@@ -224,7 +236,6 @@ public class BossFragment extends Fragment implements SensorEventListener {
                                 @Override public void onSuccess(Void data) { }
                                 @Override public void onError(Exception e) { }
                             });
-                            // ako dropuje item oruzija promeni sanse
                             if (vr != null && vr.equipmentDropped && "WEAPON".equals(vr.equipmentType)) {
                                 String droppedId = vr.equipmentItemId;
                                 if (droppedId != null) {

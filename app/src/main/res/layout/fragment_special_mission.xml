@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Slika specijalnog bosa (ista kao regularni) -->
+    <ImageView
+        android:id="@+id/ivSpecialBoss"
+        android:layout_width="220dp"
+        android:layout_height="220dp"
+        android:src="@drawable/boss_idle"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:contentDescription="@string/boss_image" />
+
+    <TextView
+        android:id="@+id/tvMissionStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textStyle="bold"
+        android:textSize="18sp"
+        android:text="Status" />
+
+    <ProgressBar
+        android:id="@+id/pbMission"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="12dp"
+        android:indeterminate="false"
+        android:layout_marginTop="12dp" />
+
+    <TextView
+        android:id="@+id/tvMissionHp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="HP" />
+
+    <TextView
+        android:id="@+id/tvMissionTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Preostalo" />
+
+    <Button
+        android:id="@+id/btnStartMission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Pokreni specijalnu misiju" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvMissionProgress"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="12dp"/>
+
+</LinearLayout>
