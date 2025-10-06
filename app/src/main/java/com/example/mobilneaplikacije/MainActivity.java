@@ -31,6 +31,7 @@ import com.example.mobilneaplikacije.ui.equipment.EquipmentSelectionFragment;
 import com.example.mobilneaplikacije.ui.friends.FriendsFragment;
 import com.example.mobilneaplikacije.ui.profile.ProfileFragment;
 import com.example.mobilneaplikacije.ui.shop.ShopFragment;
+import com.example.mobilneaplikacije.ui.statistics.StatisticsFragment;
 import com.example.mobilneaplikacije.ui.task.AddTaskFragment;
 import com.example.mobilneaplikacije.ui.task.TaskCalendarFragment;
 import com.example.mobilneaplikacije.ui.task.TaskListFragment;
@@ -162,6 +163,12 @@ public class MainActivity extends AppCompatActivity {
             getSupportFragmentManager()
                     .beginTransaction()
                     .replace(R.id.fragment_container, new ProfileFragment())
+                    .commit();
+            return true;
+        } else if (item.getItemId() == R.id.action_statistics) {
+            getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.fragment_container, new StatisticsFragment())
                     .commit();
             return true;
         } else if (item.getItemId() == R.id.action_equipment) {

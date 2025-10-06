@@ -6,6 +6,11 @@
         android:title="Profil"
         app:showAsAction="always" />
     <item
+        android:id="@+id/action_statistics"
+        android:icon="@android:drawable/ic_menu_sort_by_size"
+        android:title="Statistika"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/action_equipment"
         android:icon="@android:drawable/ic_menu_view"
         android:title="Oprema"
