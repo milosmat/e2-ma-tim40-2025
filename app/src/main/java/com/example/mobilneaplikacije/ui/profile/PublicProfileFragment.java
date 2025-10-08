@@ -70,11 +70,7 @@ public class PublicProfileFragment extends Fragment {
         if (avatarRes != 0) ivAvatar.setImageResource(avatarRes);
 
         badgesContainer.removeAllViews();
-        for (String b : p.badges) {
-            TextView tv = (TextView) LayoutInflater.from(getContext()).inflate(R.layout.view_badge, badgesContainer, false);
-            tv.setText(b);
-            badgesContainer.addView(tv);
-        }
+        loadBadgeForUser(p.uid);
 
         equipmentContainer.removeAllViews();
         for (Item it : p.activeItems) {
@@ -87,6 +83,21 @@ public class PublicProfileFragment extends Fragment {
             equipmentContainer.addView(row);
         }
         try { ivQr.setImageBitmap(generateQr(p.uid, 512)); } catch (Exception ignored) {}
+    }
+
+    private void loadBadgeForUser(String userId) {
+        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("users").document(userId).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Long completed = doc.getLong("specialMissionsWon");
+                        int count = (completed != null) ? completed.intValue() : 0;
+                        TextView tv = (TextView) LayoutInflater.from(getContext()).inflate(R.layout.view_badge, badgesContainer, false);
+                        tv.setText("Bedž: " + count);
+                        badgesContainer.addView(tv);
+                    }
+                })
+                .addOnFailureListener(e -> {});
     }
 
     private Bitmap generateQr(String text, int size) throws WriterException {

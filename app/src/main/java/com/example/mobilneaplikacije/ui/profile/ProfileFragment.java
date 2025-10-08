@@ -25,7 +25,7 @@ import com.google.firebase.firestore.*;
 public class ProfileFragment extends Fragment {
 
     private ImageView ivAvatar;
-    private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvNexLvlXP , tvMissions;
+    private TextView tvUsername, tvLevel, tvTitle, tvPP, tvXP, tvCoins, tvNexLvlXP , tvMissions, tvBadge;
     private Button btnChangePassword;
 
     private LevelManager levelManager;
@@ -51,6 +51,7 @@ public class ProfileFragment extends Fragment {
         //tvNexLvlXP = view.findViewById(R.id.tvNextLvlXP);
         tvCoins = view.findViewById(R.id.tvCoins);
         tvMissions = view.findViewById(R.id.tvMissions);
+        tvBadge = view.findViewById(R.id.tvBadge);
         Button btnLogout = view.findViewById(R.id.btnLogout);
         btnChangePassword = view.findViewById(R.id.btnChangePassword);
 
@@ -101,6 +102,7 @@ public class ProfileFragment extends Fragment {
         });
 
         loadCompletedMissionsCount();
+        loadSpecialMissionsCompleted();
     }
 
     private void loadCompletedMissionsCount() {
@@ -154,6 +156,24 @@ public class ProfileFragment extends Fragment {
                         tvMissions.setText("Završene misije: -")
                 );
     }
+
+    private void loadSpecialMissionsCompleted() {
+        FirebaseUser freshUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (freshUser == null) return;
+
+        db.collection("users").document(freshUser.getUid()).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Long completed = doc.getLong("specialMissionsWon");
+                        int count = (completed != null) ? completed.intValue() : 0;
+                        tvBadge.setText("Bedž: " + count);
+                    } else {
+                        tvBadge.setText("Bedž: 0");
+                    }
+                })
+                .addOnFailureListener(e -> tvBadge.setText("Bedž: -"));
+    }
+
     private void logOut() {
         authRepo.logOut();
 
