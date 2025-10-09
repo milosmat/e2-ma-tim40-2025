@@ -348,7 +348,8 @@ public class TaskDetailFragment extends Fragment {
         btnMarkDone.setEnabled(canAct);
         btnCancel.setEnabled(canAct);
 
-        if (isRecurring && occurrenceId == null) {
+        // Always allow pausing recurring tasks, even when opened from Calendar (occurrence view)
+        if (isRecurring) {
             if ("ACTIVE".equals(masterStatus)) {
                 btnPause.setEnabled(true);
                 btnPause.setText("Pauziraj zadatak");

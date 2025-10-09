@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
-    <!-- Slika specijalnog bosa (ista kao regularni) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="96dp">
+
     <ImageView
         android:id="@+id/ivSpecialBoss"
         android:layout_width="220dp"
@@ -45,6 +51,14 @@
         android:layout_marginTop="4dp"
         android:text="Preostalo" />
 
+    <TextView
+        android:id="@+id/tvMissionBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Osvojene spec. misije: 0"
+        android:textStyle="italic" />
+
     <Button
         android:id="@+id/btnStartMission"
         android:layout_width="wrap_content"
@@ -52,11 +66,23 @@
         android:layout_marginTop="16dp"
         android:text="Pokreni specijalnu misiju" />
 
+    <Button
+        android:id="@+id/btnClaimReward"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Preuzmi nagradu"
+        android:visibility="gone" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvMissionProgress"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp"/>
+        android:layout_marginTop="12dp"
+        android:clipToPadding="false"
+        android:paddingBottom="64dp"/>
 
-</LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>

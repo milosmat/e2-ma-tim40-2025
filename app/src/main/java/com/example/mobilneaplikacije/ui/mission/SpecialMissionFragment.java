@@ -21,10 +21,11 @@ import com.example.mobilneaplikacije.data.repository.SpecialMissionRepository;
 
 public class SpecialMissionFragment extends Fragment {
 
-    private TextView tvStatus, tvHp, tvTime;
+    private TextView tvStatus, tvHp, tvTime, tvBadge;
     private android.widget.ImageView ivBoss;
     private ProgressBar pb;
     private Button btnStart;
+    private Button btnClaim;
     private RecyclerView rvProgress;
     private String allianceId;
     private boolean isLeader;
@@ -42,11 +43,13 @@ public class SpecialMissionFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-    tvStatus = view.findViewById(R.id.tvMissionStatus);
+        tvStatus = view.findViewById(R.id.tvMissionStatus);
         tvHp = view.findViewById(R.id.tvMissionHp);
         tvTime = view.findViewById(R.id.tvMissionTime);
+        tvBadge = view.findViewById(R.id.tvMissionBadge);
         pb = view.findViewById(R.id.pbMission);
         btnStart = view.findViewById(R.id.btnStartMission);
+    btnClaim = view.findViewById(R.id.btnClaimReward);
     ivBoss = view.findViewById(R.id.ivSpecialBoss);
         rvProgress = view.findViewById(R.id.rvMissionProgress);
         rvProgress.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -95,15 +98,33 @@ public class SpecialMissionFragment extends Fragment {
             if (btnStart != null) btnStart.setVisibility(View.GONE);
             return;
         }
+        // Pokušaj finalizacije ako je vreme ili boss mrtav
+        repo.finalizeIfDue(allianceId, new SpecialMissionRepository.Callback<Void>() {
+            @Override public void onSuccess(Void data) { loadState(); }
+            @Override public void onError(Exception e) { loadState(); }
+        });
+    }
+
+    private void loadState() {
         repo.getCurrent(allianceId, new SpecialMissionRepository.Callback<SpecialMissionRepository.MissionState>() {
             @Override public void onSuccess(SpecialMissionRepository.MissionState s) {
                 if (s == null || !s.active) {
-                    tvStatus.setText("Nema aktivne misije");
+                    boolean ended = s != null;
+                    boolean rewardsReady = ended && (s.rewardsGiven || s.rewardsComputed);
+                    if (!ended) {
+                        tvStatus.setText("Nema aktivne misije");
+                    } else if (rewardsReady) {
+                        tvStatus.setText("Specijalna misija završena - preuzmite nagradu");
+                    } else {
+                        tvStatus.setText("Specijalna misija završena");
+                    }
                     tvHp.setText("");
                     tvTime.setText("");
                     pb.setProgress(0); pb.setMax(1);
                     if (ivBoss != null) ivBoss.setImageResource(com.example.mobilneaplikacije.R.drawable.boss_idle);
                     if (btnStart != null) btnStart.setVisibility(isLeader ? View.VISIBLE : View.GONE);
+                    updateClaimVisibility(rewardsReady);
+                    loadBadge();
                     return;
                 }
                 tvStatus.setText("Aktivna misija");
@@ -115,16 +136,73 @@ public class SpecialMissionFragment extends Fragment {
                 long days = Math.max(0, rem / (24L*60*60*1000));
                 tvTime.setText("Preostalo: " + days + " d");
                 if (btnStart != null) btnStart.setVisibility(View.GONE);
+                if (btnClaim != null) btnClaim.setVisibility(View.GONE);
 
                 repo.listProgress(allianceId, new SpecialMissionRepository.Callback<java.util.List<SpecialMissionRepository.UserProgress>>() {
                     @Override public void onSuccess(java.util.List<SpecialMissionRepository.UserProgress> data) {
                         if (adapter != null) adapter.setItems(data);
+                        loadBadge();
                     }
                     @Override public void onError(Exception e) { }
                 });
             }
             @Override public void onError(Exception e) { toast(e.getMessage()); }
         });
+    }
+
+    private void loadBadge() {
+        com.google.firebase.auth.FirebaseUser u = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (u == null) return;
+        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(u.getUid())
+                .get().addOnSuccessListener(d -> {
+                    Long won = d.getLong("specialMissionsWon");
+                    if (tvBadge != null) tvBadge.setText("Osvojene spec. misije: " + (won == null ? 0 : won));
+                    // After fetching badge, we may need to verify if reward already claimed
+                    if (allianceId != null) checkClaimStatusAndUpdate();
+                });
+    }
+
+    private void checkClaimStatusAndUpdate() {
+        if (allianceId == null) return;
+        // Read mission and my progress to decide claim button
+        repo.getCurrent(allianceId, new SpecialMissionRepository.Callback<SpecialMissionRepository.MissionState>() {
+            @Override public void onSuccess(SpecialMissionRepository.MissionState ms) {
+                if (ms == null) { updateClaimVisibility(false); return; }
+                if (!(ms.rewardsGiven || ms.rewardsComputed)) { updateClaimVisibility(false); return; }
+                // Load my progress
+                com.google.firebase.auth.FirebaseUser u = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+                if (u == null) { updateClaimVisibility(false); return; }
+                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        .collection("alliances").document(allianceId)
+                        .collection("specialMissions").document("current")
+                        .collection("progress").document(u.getUid())
+                        .get().addOnSuccessListener(p -> {
+                            Boolean claimed = p.getBoolean("rewardClaimed");
+                            updateClaimVisibility(!Boolean.TRUE.equals(claimed));
+                        }).addOnFailureListener(e -> updateClaimVisibility(false));
+            }
+            @Override public void onError(Exception e) { updateClaimVisibility(false); }
+        });
+    }
+
+    private void updateClaimVisibility(boolean show) {
+        if (btnClaim == null) return;
+        btnClaim.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show && btnClaim.getTag() == null) {
+            btnClaim.setText("Preuzmi nagradu");
+            btnClaim.setOnClickListener(v -> {
+                if (allianceId == null) return;
+                repo.claimReward(allianceId, new SpecialMissionRepository.Callback<Void>() {
+                    @Override public void onSuccess(Void data) {
+                        toast("Nagrada preuzeta");
+                        btnClaim.setVisibility(View.GONE);
+                        loadBadge();
+                    }
+                    @Override public void onError(Exception e) { toast(e.getMessage()); }
+                });
+            });
+            btnClaim.setTag("init");
+        }
     }
 
     private void toast(String m) { if (isAdded()) Toast.makeText(requireContext(), m, Toast.LENGTH_SHORT).show(); }

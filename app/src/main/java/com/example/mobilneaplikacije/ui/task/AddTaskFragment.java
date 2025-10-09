@@ -91,8 +91,15 @@ public class AddTaskFragment extends Fragment {
         });
 
         LinearLayout layoutRecurring = view.findViewById(R.id.layoutRecurring);
-        switchRecurring.setOnCheckedChangeListener((btn, checked) ->
-                layoutRecurring.setVisibility(checked ? View.VISIBLE : View.GONE));
+        switchRecurring.setOnCheckedChangeListener((btn, checked) -> {
+            layoutRecurring.setVisibility(checked ? View.VISIBLE : View.GONE);
+            btnPickEndDate.setVisibility(checked ? View.VISIBLE : View.GONE);
+            if (!checked) pickedEndDate = 0L;
+        });
+
+        boolean isRecurringInit = switchRecurring.isChecked();
+        layoutRecurring.setVisibility(isRecurringInit ? View.VISIBLE : View.GONE);
+        btnPickEndDate.setVisibility(isRecurringInit ? View.VISIBLE : View.GONE);
 
         btnPickDate.setOnClickListener(v -> {
             Calendar calendar = Calendar.getInstance();

@@ -1,13 +1,21 @@
 package com.example.mobilneaplikacije.data.repository;
 
+import android.util.Log;
+
 import androidx.annotation.Nullable;
 
+import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.model.Task;
 import com.example.mobilneaplikacije.data.model.TaskOccurrence;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.*;
+import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.tasks.TaskCompletionSource;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.OnFailureListener;
 
 import java.util.*;
 
@@ -340,6 +348,8 @@ public class TaskRepository {
                         new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
                                 .tryApplyNoUnresolvedBonusForMyAlliance(null);
                     } catch (Exception ignored) { }
+                    // Async refresh boss hit chance based on updated success in current stage
+                    try { recalcAndUpdateHitChanceAsync(); } catch (Exception ignored) {}
                     cb.onSuccess(v);
                 })
                 .addOnFailureListener(cb::onError);
@@ -442,6 +452,8 @@ public class TaskRepository {
                         new com.example.mobilneaplikacije.data.repository.SpecialMissionRepository()
                                 .tryApplyNoUnresolvedBonusForMyAlliance(null);
                     } catch (Exception ignored) { }
+                    // Async refresh boss hit chance after single task completion
+                    try { recalcAndUpdateHitChanceAsync(); } catch (Exception ignored) {}
                     cb.onSuccess(v);
                 })
                 .addOnFailureListener(cb::onError);
@@ -583,91 +595,100 @@ public class TaskRepository {
     }
 
     public void calculateSuccessRate(long fromMillis, long toMillis, Callback<Double> cb) {
-        final int[] totalCreated = {0};
-        final int[] donePos = {0};
-        final int[] overQuota = {0};
-        final int[] pending = {3};
-
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
         Timestamp fromTs = new Timestamp(new Date(fromMillis));
-        Timestamp toTs   = new Timestamp(new Date(toMillis));
+        Timestamp toTs = new Timestamp(new Date(toMillis));
 
-        tasksCol()
+        com.google.android.gms.tasks.Task<QuerySnapshot> singlesTask = db.collection("users")
+                .document(uid)
+                .collection("tasks")
                 .whereEqualTo("isRecurring", false)
                 .whereGreaterThanOrEqualTo("createdAt", fromTs)
                 .whereLessThanOrEqualTo("createdAt", toTs)
-                .get(Source.SERVER)
-                .addOnSuccessListener(snap -> {
-                    int cnt = 0;
-                    for (DocumentSnapshot d : snap.getDocuments()) {
-                        String st = d.getString("status");
-                        if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue;
-                        cnt++;
-                    }
-                    totalCreated[0] += cnt;
-                    if (--pending[0] == 0) {
-                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
-                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
-                    }
-                })
-                .addOnFailureListener(cb::onError);
+                .get();
 
-        tasksCol().whereEqualTo("isRecurring", true).get(Source.SERVER)
-                .addOnSuccessListener(recSnap -> {
-                    if (recSnap.isEmpty()) {
-                        if (--pending[0] == 0) {
-                            int denom = Math.max(0, totalCreated[0] - overQuota[0]);
-                            cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
-                        }
-                        return;
-                    }
-                    for (DocumentSnapshot master : recSnap.getDocuments()) {
-                        pending[0]++;
-                        occCol(master.getId())
-                                .whereGreaterThanOrEqualTo("createdAt", fromTs)
-                                .whereLessThanOrEqualTo("createdAt", toTs)
-                                .get(Source.SERVER)
-                                .addOnSuccessListener(occSnap -> {
-                                    int cnt = 0;
-                                    for (DocumentSnapshot od : occSnap.getDocuments()) {
-                                        String st = od.getString("status");
-                                        if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue;
-                                        cnt++;
-                                    }
-                                    totalCreated[0] += cnt;
-                                    if (--pending[0] == 0) {
-                                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
-                                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
-                                    }
-                                })
-                                .addOnFailureListener(cb::onError);
-                    }
-                    if (--pending[0] == 0) {
-                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
-                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
-                    }
-                })
-                .addOnFailureListener(cb::onError);
+        com.google.android.gms.tasks.Task<QuerySnapshot> occTask = db.collectionGroup("occurrences")
+                .whereGreaterThanOrEqualTo("createdAt", fromTs)
+                .whereLessThanOrEqualTo("createdAt", toTs)
+                .get();
 
-        logsCol()
+        com.google.android.gms.tasks.Task<QuerySnapshot> logsTask = db.collection("users")
+                .document(uid)
+                .collection("completionLogs")
                 .whereGreaterThanOrEqualTo("completedAt", fromMillis)
                 .whereLessThanOrEqualTo("completedAt", toMillis)
-                .get(Source.SERVER)
-                .addOnSuccessListener(logSnap -> {
-                    int pos = 0, over = 0;
-                    for (DocumentSnapshot d : logSnap.getDocuments()) {
-                        Long xpL = d.getLong("xpAwarded");
-                        int xp = (xpL == null) ? 1 : xpL.intValue();
-                        if (xp > 0) pos++; else over++;
+                .get();
+
+        com.google.android.gms.tasks.Tasks.whenAll(Arrays.asList(singlesTask, occTask, logsTask))
+                .addOnSuccessListener(voidResult -> {
+                    int totalCreated = 0;
+                    int done = 0;
+                    int over = 0;
+
+                    QuerySnapshot singles = singlesTask.getResult();
+                    if (singles != null) {
+                        for (DocumentSnapshot d : singles.getDocuments()) {
+                            String st = d.getString("status");
+                            if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue;
+                            totalCreated++;
+                        }
                     }
-                    donePos[0] = pos;
-                    overQuota[0] = over;
-                    if (--pending[0] == 0) {
-                        int denom = Math.max(0, totalCreated[0] - overQuota[0]);
-                        cb.onSuccess(denom == 0 ? 0.0 : (donePos[0] * 100.0 / denom));
+
+                    QuerySnapshot occs = occTask.getResult();
+                    if (occs != null) {
+                        for (DocumentSnapshot d : occs.getDocuments()) {
+                            String st = d.getString("status");
+                            if ("PAUSED".equals(st) || "CANCELLED".equals(st)) continue;
+                            totalCreated++;
+                        }
                     }
+
+                    QuerySnapshot logs = logsTask.getResult();
+                    if (logs != null) {
+                        for (DocumentSnapshot log : logs.getDocuments()) {
+                            Long xpL = log.getLong("xpAwarded");
+                            int xp = (xpL == null) ? 0 : xpL.intValue();
+                            if (xp > 0) done++; else over++;
+                        }
+                    }
+
+                    int denom = Math.max(0, totalCreated - over);
+                    double rate = (denom == 0) ? 0.0 : (done * 100.0 / denom);
+                    Log.d("TaskRepo", "Singles=" + singles.size() + ", Occs=" + occs.size() + ", Logs=" + logs.size());
+
+                    Log.d("TaskRepo", String.format("SuccessRate=%.2f%% | done=%d over=%d total=%d denom=%d",
+                            rate, done, over, totalCreated, denom));
+
+                    cb.onSuccess(rate);
                 })
-                .addOnFailureListener(cb::onError);
+                .addOnFailureListener(e -> {
+                    Log.e("TaskRepo", "calculateSuccessRate failed", e);
+                    cb.onError(e);
+                });
     }
 
     public interface StageSuccessCallback { void onSuccess(int successPercent, long totalCounted); void onError(Exception e); }
+
+    public void recalcAndUpdateHitChanceAsync() {
+        final long now = System.currentTimeMillis();
+        new PlayerRepository().loadPlayer(new PlayerRepository.PlayerCallback() {
+            @Override public void onSuccess(Player player) {
+                long from = player.getLastLevelUpAt() > 0 ? player.getLastLevelUpAt() : player.getCreatedAt();
+                if (from <= 0) from = now - 24L*60*60*1000;
+                calculateSuccessRate(from, now, new Callback<Double>() {
+                    @Override public void onSuccess(@Nullable Double data) {
+                        int pct = (data == null) ? 0 : (int)Math.round(data);
+                        pct = Math.max(0, Math.min(100, pct));
+                        FirebaseFirestore.getInstance()
+                                .collection("users").document(uid)
+                                .collection("battle").document("current")
+                                .set(java.util.Collections.singletonMap("hitChance", pct), SetOptions.merge());
+                    }
+                    @Override public void onError(Exception e) {  }
+                });
+            }
+            @Override public void onFailure(Exception e) { }
+        });
+    }
 }

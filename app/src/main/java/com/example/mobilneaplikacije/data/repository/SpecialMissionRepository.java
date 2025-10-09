@@ -16,14 +16,6 @@ import com.google.firebase.firestore.SetOptions;
 
 import java.util.*;
 
-/**
- * Manages Special Alliance Mission lifecycle and progress updates.
- * Firestore structure:
- * alliances/{allianceId}/specialMissions/current
- *   - startedAt, endsAt, bossMaxHp, bossHp, status, membersCountAtStart, rewardsGiven
- * alliances/{allianceId}/specialMissions/current/progress/{uid}
- *   - purchases, hits, groupA, groupB, chatDays(map yyyyMMdd->true), dealtHp
- */
 public class SpecialMissionRepository {
 
     public interface Callback<T> { void onSuccess(@Nullable T data); void onError(Exception e); }
@@ -55,8 +47,8 @@ public class SpecialMissionRepository {
         public long bossMaxHp;
         public long bossHp;
         public boolean rewardsGiven;
+        public boolean rewardsComputed;
     }
-
     public static class UserProgress {
         public String uid;
         public int purchases;
@@ -79,6 +71,7 @@ public class SpecialMissionRepository {
             Long mx = d.getLong("bossMaxHp"); s.bossMaxHp = mx == null ? 0 : mx;
             Long hp = d.getLong("bossHp"); s.bossHp = hp == null ? 0 : hp;
             Boolean r = d.getBoolean("rewardsGiven"); s.rewardsGiven = Boolean.TRUE.equals(r);
+            Boolean rc = d.getBoolean("rewardsComputed"); s.rewardsComputed = Boolean.TRUE.equals(rc);
             long now = System.currentTimeMillis();
             if (s.active && s.endsAt > 0 && now > s.endsAt) {
                 Map<String, Object> up = new HashMap<>();
@@ -86,7 +79,7 @@ public class SpecialMissionRepository {
                 missionDoc(allianceId).set(up, SetOptions.merge());
                 db.collection("alliances").document(allianceId).update("isSpecialMissionActive", false);
                 s.active = false;
-                distributeRewardsIfNeeded(allianceId, new Callback<Void>() { @Override public void onSuccess(@Nullable Void data) {} @Override public void onError(Exception e) {} });
+                markRewardsComputedIfEligible(allianceId);
             }
             cb.onSuccess(s);
         }).addOnFailureListener(cb::onError);
@@ -136,6 +129,7 @@ public class SpecialMissionRepository {
                 mission.put("bossHp", hp);
                 mission.put("membersCountAtStart", members);
                 mission.put("rewardsGiven", false);
+                mission.put("rewardsComputed", false);
                 mission.put("createdAt", FieldValue.serverTimestamp());
 
                 com.google.firebase.firestore.WriteBatch batch = db.batch();
@@ -252,6 +246,76 @@ public class SpecialMissionRepository {
           .addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
     }
 
+    public void finalizeIfDue(String allianceId, @Nullable Callback<Void> cb) {
+        if (allianceId == null) { if (cb!=null) cb.onSuccess(null); return; }
+        missionDoc(allianceId).get().addOnSuccessListener(md -> {
+            if (!md.exists()) { if (cb!=null) cb.onSuccess(null); return; }
+            Boolean active = md.getBoolean("active");
+            Boolean rewardsGiven = md.getBoolean("rewardsGiven");
+            Boolean rewardsComputed = md.getBoolean("rewardsComputed");
+            Long endsAt = md.getLong("endsAt");
+            Long bossHpL = md.getLong("bossHp");
+            long now = System.currentTimeMillis();
+            long bossHp = bossHpL == null ? 0 : bossHpL;
+            boolean timeUp = endsAt != null && now >= endsAt;
+            boolean bossDead = bossHp <= 0;
+            if (Boolean.TRUE.equals(rewardsGiven) || Boolean.TRUE.equals(rewardsComputed)) { if (cb!=null) cb.onSuccess(null); return; }
+            if (!Boolean.TRUE.equals(active) && !timeUp && !bossDead) { if (cb!=null) cb.onSuccess(null); return; }
+
+            if (Boolean.TRUE.equals(active) && (timeUp || bossDead)) {
+                Map<String,Object> up = new HashMap<>();
+                up.put("active", false);
+                up.put("updatedAt", FieldValue.serverTimestamp());
+                missionDoc(allianceId).set(up, SetOptions.merge());
+                allianceDoc(allianceId).update("isSpecialMissionActive", false);
+            }
+
+            db.collection("users").whereEqualTo("allianceId", allianceId).get().addOnSuccessListener(users -> {
+                if (users.isEmpty()) {
+                    missionDoc(allianceId).get().addOnSuccessListener(md2 -> {
+                        Long hp2 = md2.getLong("bossHp");
+                        if (hp2 != null && hp2 <= 0) {
+                            distributeRewardsIfNeeded(allianceId, new Callback<Void>() { @Override public void onSuccess(@Nullable Void data) { if (cb!=null) cb.onSuccess(null); } @Override public void onError(Exception e) { if (cb!=null) cb.onError(e); } });
+                        } else { if (cb!=null) cb.onSuccess(null); }
+                    }).addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
+                    return;
+                }
+                final int total = users.size();
+                if (total == 0) { if (cb!=null) cb.onSuccess(null); return; }
+                final int[] done = {0};
+                final int[] failed = {0};
+                for (DocumentSnapshot u : users.getDocuments()) {
+                    String memberUid = u.getId();
+                    tryApplyNoUnresolvedBonus(allianceId, memberUid, new Callback<Void>() {
+                        @Override public void onSuccess(@Nullable Void data) {
+                            if (++done[0] + failed[0] == total) {
+                                missionDoc(allianceId).get().addOnSuccessListener(md3 -> {
+                                    Long hp3 = md3.getLong("bossHp");
+                                    if (hp3 != null && hp3 <= 0) {
+                                        markRewardsComputedIfEligible(allianceId);
+                                    }
+                                    if (cb!=null) cb.onSuccess(null);
+                                }).addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
+                            }
+                        }
+                        @Override public void onError(Exception e) {
+                            failed[0]++;
+                            if (done[0] + failed[0] == total) {
+                                missionDoc(allianceId).get().addOnSuccessListener(md3 -> {
+                                    Long hp3 = md3.getLong("bossHp");
+                                    if (hp3 != null && hp3 <= 0) {
+                                        markRewardsComputedIfEligible(allianceId);
+                                    }
+                                    if (cb!=null) cb.onSuccess(null);
+                                }).addOnFailureListener(ex -> { if (cb!=null) cb.onError(ex); });
+                            }
+                        }
+                    });
+                }
+            }).addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
+        }).addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
+    }
+
     private void applyCappedDelta(String allianceId, String forUid, String field, int cap, int hpPerIncrement, int incrementsRequested, @Nullable Callback<Void> cb) {
         db.runTransaction(tr -> {
             DocumentSnapshot md = tr.get(missionDoc(allianceId));
@@ -292,8 +356,8 @@ public class SpecialMissionRepository {
 
             return null;
                 }).addOnSuccessListener(v -> {
-                        try { distributeRewardsIfNeeded(allianceId, new Callback<Void>() { @Override public void onSuccess(@Nullable Void data) {} @Override public void onError(Exception e) {} }); } catch (Exception ignored) {}
-                        if (cb!=null) cb.onSuccess(null);
+                    try { markRewardsComputedIfEligible(allianceId); } catch (Exception ignored) {}
+                    if (cb!=null) cb.onSuccess(null);
                 })
           .addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
     }
@@ -305,114 +369,136 @@ public class SpecialMissionRepository {
     }
 
     public void distributeRewardsIfNeeded(String allianceId, Callback<Void> cb) {
+        markRewardsComputedIfEligible(allianceId);
+        cb.onSuccess(null);
+    }
+
+    private void markRewardsComputedIfEligible(String allianceId) {
         missionDoc(allianceId).get().addOnSuccessListener(md -> {
-            if (!md.exists()) { cb.onSuccess(null); return; }
+            if (!md.exists()) return;
             Boolean active = md.getBoolean("active");
-            Boolean rewardsGiven = md.getBoolean("rewardsGiven");
+            Boolean rc = md.getBoolean("rewardsComputed");
             Long bossHp = md.getLong("bossHp");
-            if (Boolean.TRUE.equals(active) || Boolean.TRUE.equals(rewardsGiven) || (bossHp != null && bossHp > 0)) { cb.onSuccess(null); return; }
+            if (Boolean.TRUE.equals(rc)) return;
+            if (Boolean.TRUE.equals(active)) return;
+            if (bossHp != null && bossHp > 0) return;
+            missionDoc(allianceId).set(new HashMap<String,Object>(){{
+                put("rewardsComputed", true);
+                put("rewardsGiven", true);
+                put("updatedAt", FieldValue.serverTimestamp());
+            }}, SetOptions.merge());
+        });
+    }
 
-            db.collection("users").whereEqualTo("allianceId", allianceId).get().addOnSuccessListener(users -> {
-                new CatalogRepository().getAll(new CatalogRepository.Callback<List<Item>>() {
-                    @Override public void onSuccess(@Nullable List<Item> catalog) {
-                        String potionId = null, clothesId = null;
-                        if (catalog != null) for (Item it : catalog) {
-                            if (it == null || it.id == null) continue;
-                            if (potionId == null && it.type == Item.Type.POTION) potionId = it.id;
-                            if (clothesId == null && it.type == Item.Type.CLOTHES) clothesId = it.id;
-                        }
+    public void claimReward(String allianceId, Callback<Void> cb) {
+        if (allianceId == null) { if (cb!=null) cb.onSuccess(null); return; }
+        new CatalogRepository().getAll(new CatalogRepository.Callback<List<Item>>() {
+            @Override public void onSuccess(@Nullable List<Item> catalog) {
+                final String[] potionId = {null};
+                final String[] clothesId = {null};
+                if (catalog != null) {
+                    for (Item it : catalog) {
+                        if (it == null || it.id == null) continue;
+                        if (potionId[0] == null && it.type == Item.Type.POTION) potionId[0] = it.id;
+                        if (clothesId[0] == null && it.type == Item.Type.CLOTHES) clothesId[0] = it.id;
+                    }
+                }
+                android.util.Log.d("SpecMission", "claimReward start alliance=" + allianceId + " potionId=" + potionId[0] + " clothesId=" + clothesId[0]);
+                db.runTransaction(tr -> {
+                    DocumentReference missionRef = missionDoc(allianceId);
+                    DocumentSnapshot md = tr.get(missionRef);
+                    if (!md.exists()) { android.util.Log.w("SpecMission","claimReward: mission missing"); return null; }
+                    Boolean active = md.getBoolean("active");
+                    Boolean rc = md.getBoolean("rewardsComputed");
+                    Long bossHp = md.getLong("bossHp");
+                    if (Boolean.TRUE.equals(active)) { android.util.Log.d("SpecMission","claimReward: mission still active"); return null; }
+                    if (!Boolean.TRUE.equals(rc) && (bossHp != null && bossHp > 0)) { android.util.Log.d("SpecMission","claimReward: rewards not ready"); return null; }
 
-                        final int total = users.size();
-                        if (total == 0) {
-                            missionDoc(allianceId).set(new HashMap<String,Object>(){{ put("rewardsGiven", true); }}, SetOptions.merge())
-                                    .addOnSuccessListener(v -> cb.onSuccess(null))
-                                    .addOnFailureListener(cb::onError);
-                            return;
-                        }
+                    DocumentReference pRef = progressCol(allianceId).document(uid);
+                    DocumentSnapshot pd = tr.get(pRef);
+                    Boolean already = pd.getBoolean("rewardClaimed");
+                    if (Boolean.TRUE.equals(already)) { android.util.Log.d("SpecMission","claimReward: already claimed"); return null; }
 
-                        final int[] done = {0};
-                        final int[] failed = {0};
-                        for (DocumentSnapshot u : users.getDocuments()) {
-                            String memberUid = u.getId();
-                            DocumentReference uref = db.collection("users").document(memberUid);
-                            DocumentReference stateRef = uref.collection("battle").document("current");
-                            DocumentReference invPotion = uref.collection("inventory").document(potionId == null ? "__none__" : potionId);
-                            DocumentReference invClothes = uref.collection("inventory").document(clothesId == null ? "__none__" : clothesId);
+                    DocumentReference userRef = db.collection("users").document(uid);
+                    DocumentReference battleRef = userRef.collection("battle").document("current");
+                    DocumentSnapshot battle = tr.get(battleRef);
+                    DocumentSnapshot userSnap = tr.get(userRef);
 
-                            String finalPotionId = potionId;
-                            String finalClothesId = clothesId;
-                            db.runTransaction(tr -> {
-                                DocumentSnapshot sd = tr.get(stateRef);
-                                int curIdx = 1;
-                                if (sd.exists()) {
-                                    Long idx = sd.getLong("currentBossIndex");
-                                    curIdx = (idx == null) ? 1 : idx.intValue();
-                                }
-                                long nextReward = BattleManager.coinsForIndex(curIdx + 1);
-                                long coinsAward = Math.round(nextReward * 0.5);
+                    DocumentSnapshot invPotionSnap = null;
+                    DocumentSnapshot invClothesSnap = null;
+                    DocumentReference invPotionRef = null;
+                    DocumentReference invClothesRef = null;
+                    if (potionId[0] != null) {
+                        invPotionRef = userRef.collection("inventory").document(potionId[0]);
+                        invPotionSnap = tr.get(invPotionRef);
+                    }
+                    if (clothesId[0] != null) {
+                        invClothesRef = userRef.collection("inventory").document(clothesId[0]);
+                        invClothesSnap = tr.get(invClothesRef);
+                    }
 
-                                DocumentSnapshot ud = tr.get(uref);
-                                Long coins = ud.getLong("coins"); if (coins == null) coins = 0L;
-                                Long finalCoins = coins;
-                                tr.update(uref, new HashMap<String, Object>() {{
-                                    put("coins", finalCoins + coinsAward);
-                                    Long cur = ud.getLong("specialMissionsWon");
-                                    put("specialMissionsWon", (cur == null ? 0 : cur) + 1);
-                                }});
+                    int curIdx = 1;
+                    if (battle.exists()) {
+                        Long ci = battle.getLong("currentBossIndex");
+                        if (ci != null && ci > 0) curIdx = ci.intValue();
+                    }
+                    long nextReward = BattleManager.coinsForIndex(curIdx + 1);
+                    long coinsAward = Math.round(nextReward * 0.5);
+                    Long coins = userSnap.getLong("coins"); if (coins == null) coins = 0L;
+                    Long smw = userSnap.getLong("specialMissionsWon");
+                    int newCount = (smw == null ? 0 : smw.intValue()) + 1;
 
-                                if (finalPotionId != null) {
-                                    DocumentSnapshot pd = tr.get(invPotion);
-                                    if (!pd.exists()) {
-                                        Map<String, Object> m = new HashMap<>();
-                                        m.put("itemId", finalPotionId);
-                                        m.put("quantity", 1);
-                                        m.put("active", false);
-                                        m.put("remainingBattles", 0);
-                                        m.put("upgradeLevel", 0);
-                                        m.put("dropChance", 0.0);
-                                        tr.set(invPotion, m);
-                                    } else {
-                                        Long q = pd.getLong("quantity");
-                                        tr.update(invPotion, "quantity", (q == null ? 0 : q) + 1);
-                                    }
-                                }
-                                if (finalClothesId != null) {
-                                    DocumentSnapshot cd = tr.get(invClothes);
-                                    if (!cd.exists()) {
-                                        Map<String, Object> m = new HashMap<>();
-                                        m.put("itemId", finalClothesId);
-                                        m.put("quantity", 1);
-                                        m.put("active", false);
-                                        m.put("remainingBattles", 0);
-                                        m.put("upgradeLevel", 0);
-                                        m.put("dropChance", 0.0);
-                                        tr.set(invClothes, m);
-                                    } else {
-                                        Long q = cd.getLong("quantity");
-                                        tr.update(invClothes, "quantity", (q == null ? 0 : q) + 1);
-                                    }
-                                }
-                                return null;
-                            }).addOnSuccessListener(v -> {
-                                if (++done[0] == total) {
-                                    missionDoc(allianceId).set(new HashMap<String,Object>(){{ put("rewardsGiven", true); }}, SetOptions.merge())
-                                            .addOnSuccessListener(vv -> cb.onSuccess(null))
-                                            .addOnFailureListener(cb::onError);
-                                }
-                            }).addOnFailureListener(e -> {
-                                failed[0]++;
-                                if ((done[0] + failed[0]) == total) {
-                                    missionDoc(allianceId).set(new HashMap<String,Object>(){{ put("rewardsGiven", true); }}, SetOptions.merge())
-                                            .addOnSuccessListener(vv -> cb.onSuccess(null))
-                                            .addOnFailureListener(cb::onError);
-                                }
-                            });
+                    Long finalCoins = coins;
+                    tr.update(userRef, new HashMap<String,Object>() {{
+                        put("coins", finalCoins + coinsAward);
+                        put("specialMissionsWon", newCount);
+                    }});
+
+                    if (invPotionRef != null) {
+                        if (invPotionSnap == null || !invPotionSnap.exists()) {
+                            Map<String,Object> m = new HashMap<>();
+                            m.put("itemId", potionId[0]);
+                            m.put("quantity", 1);
+                            m.put("active", false);
+                            m.put("remainingBattles", 0);
+                            m.put("upgradeLevel", 0);
+                            m.put("dropChance", 0.0);
+                            tr.set(invPotionRef, m);
+                        } else {
+                            Long q = invPotionSnap.getLong("quantity");
+                            tr.update(invPotionRef, "quantity", (q == null ? 0 : q) + 1);
                         }
                     }
-                    @Override public void onError(Exception e) { cb.onError(e); }
-                });
-            }).addOnFailureListener(cb::onError);
-        }).addOnFailureListener(cb::onError);
+                    if (invClothesRef != null) {
+                        if (invClothesSnap == null || !invClothesSnap.exists()) {
+                            Map<String,Object> m = new HashMap<>();
+                            m.put("itemId", clothesId[0]);
+                            m.put("quantity", 1);
+                            m.put("active", false);
+                            m.put("remainingBattles", 0);
+                            m.put("upgradeLevel", 0);
+                            m.put("dropChance", 0.0);
+                            tr.set(invClothesRef, m);
+                        } else {
+                            Long q = invClothesSnap.getLong("quantity");
+                            tr.update(invClothesRef, "quantity", (q == null ? 0 : q) + 1);
+                        }
+                    }
+
+                    tr.set(pRef, new HashMap<String,Object>() {{
+                        put("rewardClaimed", true);
+                        put("claimedAt", FieldValue.serverTimestamp());
+                        put("claimedCoins", coinsAward);
+                    }}, SetOptions.merge());
+                    android.util.Log.d("SpecMission", "Reward claimed (claimReward) coins=" + coinsAward + " curIdx=" + curIdx);
+                    return null;
+                }).addOnSuccessListener(v -> {
+                    PlayerRepository.invalidateCache();
+                    if (cb!=null) cb.onSuccess(null);
+                }).addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
+            }
+            @Override public void onError(Exception e) { if (cb!=null) cb.onError(e); }
+        });
     }
 
     public void tryApplyNoUnresolvedBonusForMyAlliance(@Nullable Callback<Void> cb) {
@@ -432,12 +518,15 @@ public class SpecialMissionRepository {
             Boolean active = md.getBoolean("active");
             Long endsAt = md.getLong("endsAt");
             Long startedAt = md.getLong("startedAt");
-            if (!Boolean.TRUE.equals(active) || startedAt == null) { if (cb!=null) cb.onSuccess(null); return; }
+            Long bossHp = md.getLong("bossHp");
+            if (startedAt == null) { if (cb!=null) cb.onSuccess(null); return; }
             long now = System.currentTimeMillis();
-            if (endsAt != null && now > endsAt) { if (cb!=null) cb.onSuccess(null); return; }
+            boolean missionEndedByTime = (endsAt != null && now >= endsAt);
+            boolean bossDefeated = (bossHp != null && bossHp <= 0) || !Boolean.TRUE.equals(active);
+            if (!(missionEndedByTime || bossDefeated)) { if (cb!=null) cb.onSuccess(null); return; }
 
             final long start = startedAt;
-            final long end = now;
+            final long end = missionEndedByTime && endsAt != null ? endsAt : now;
 
             FirebaseFirestore db = this.db;
             final DocumentReference uroot = db.collection("users").document(targetUid);
@@ -464,7 +553,11 @@ public class SpecialMissionRepository {
                             if (!md2.exists()) return null;
                             Boolean active2 = md2.getBoolean("active");
                             Long endsAt2 = md2.getLong("endsAt");
-                            if (!Boolean.TRUE.equals(active2) || (endsAt2 != null && System.currentTimeMillis() > endsAt2)) return null;
+                            Long bossHp2 = md2.getLong("bossHp");
+                            long now2 = System.currentTimeMillis();
+                            boolean missionEndedByTime2 = (endsAt2 != null && now2 >= endsAt2);
+                            boolean bossDefeated2 = (bossHp2 != null && bossHp2 <= 0) || !Boolean.TRUE.equals(active2);
+                            if (!(missionEndedByTime2 || bossDefeated2)) return null;
 
                             DocumentReference pref = progressCol(allianceId).document(targetUid);
                             DocumentSnapshot pd = tr.get(pref);
@@ -489,7 +582,7 @@ public class SpecialMissionRepository {
                             if (newHp == 0) tr.update(allianceDoc(allianceId), "isSpecialMissionActive", false);
                             return null;
                         }).addOnSuccessListener(v -> {
-                            try { distributeRewardsIfNeeded(allianceId, new Callback<Void>() { @Override public void onSuccess(@Nullable Void data) {} @Override public void onError(Exception e) {} }); } catch (Exception ignored) {}
+                            try { markRewardsComputedIfEligible(allianceId); } catch (Exception ignored) {}
                             if (cb!=null) cb.onSuccess(null);
                         }).addOnFailureListener(e -> { if (cb!=null) cb.onError(e); });
                     }
