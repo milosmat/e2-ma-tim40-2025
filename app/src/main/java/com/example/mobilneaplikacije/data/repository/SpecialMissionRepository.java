@@ -270,10 +270,8 @@ public class SpecialMissionRepository {
                 allianceDoc(allianceId).update("isSpecialMissionActive", false);
             }
 
-            // Fetch members and attempt bonus for each
             db.collection("users").whereEqualTo("allianceId", allianceId).get().addOnSuccessListener(users -> {
                 if (users.isEmpty()) {
-                    // No members -> just attempt rewards if boss dead
                     missionDoc(allianceId).get().addOnSuccessListener(md2 -> {
                         Long hp2 = md2.getLong("bossHp");
                         if (hp2 != null && hp2 <= 0) {
@@ -291,7 +289,6 @@ public class SpecialMissionRepository {
                     tryApplyNoUnresolvedBonus(allianceId, memberUid, new Callback<Void>() {
                         @Override public void onSuccess(@Nullable Void data) {
                             if (++done[0] + failed[0] == total) {
-                                // Re-read mission for final HP and maybe distribute rewards
                                 missionDoc(allianceId).get().addOnSuccessListener(md3 -> {
                                     Long hp3 = md3.getLong("bossHp");
                                     if (hp3 != null && hp3 <= 0) {
@@ -359,7 +356,6 @@ public class SpecialMissionRepository {
 
             return null;
                 }).addOnSuccessListener(v -> {
-                    // If boss died, just mark rewards computed (users will claim themselves)
                     try { markRewardsComputedIfEligible(allianceId); } catch (Exception ignored) {}
                     if (cb!=null) cb.onSuccess(null);
                 })
@@ -372,7 +368,6 @@ public class SpecialMissionRepository {
         return String.format(Locale.US, "%04d%02d%02d", y, m, d);
     }
 
-    // Legacy method now converted to simply marking rewards computed (kept to avoid crashes where still referenced)
     public void distributeRewardsIfNeeded(String allianceId, Callback<Void> cb) {
         markRewardsComputedIfEligible(allianceId);
         cb.onSuccess(null);
@@ -385,24 +380,18 @@ public class SpecialMissionRepository {
             Boolean rc = md.getBoolean("rewardsComputed");
             Long bossHp = md.getLong("bossHp");
             if (Boolean.TRUE.equals(rc)) return;
-            if (Boolean.TRUE.equals(active)) return; // still active
-            if (bossHp != null && bossHp > 0) return; // boss not dead
+            if (Boolean.TRUE.equals(active)) return;
+            if (bossHp != null && bossHp > 0) return;
             missionDoc(allianceId).set(new HashMap<String,Object>(){{
                 put("rewardsComputed", true);
-                // Keep legacy flag for UI backward compatibility
                 put("rewardsGiven", true);
                 put("updatedAt", FieldValue.serverTimestamp());
             }}, SetOptions.merge());
         });
     }
 
-    /**
-     * User-initiated reward claim. Gives coins, increments badge, adds one potion & one clothes item if available.
-     * Idempotent: if already claimed (progress.rewardClaimed==true) it becomes a no-op.
-     */
     public void claimReward(String allianceId, Callback<Void> cb) {
         if (allianceId == null) { if (cb!=null) cb.onSuccess(null); return; }
-        // Preload catalog (optional) to pick first potion & clothes ids
         new CatalogRepository().getAll(new CatalogRepository.Callback<List<Item>>() {
             @Override public void onSuccess(@Nullable List<Item> catalog) {
                 final String[] potionId = {null};
@@ -416,7 +405,6 @@ public class SpecialMissionRepository {
                 }
                 android.util.Log.d("SpecMission", "claimReward start alliance=" + allianceId + " potionId=" + potionId[0] + " clothesId=" + clothesId[0]);
                 db.runTransaction(tr -> {
-                    // ===== READ PHASE (all reads before writes) =====
                     DocumentReference missionRef = missionDoc(allianceId);
                     DocumentSnapshot md = tr.get(missionRef);
                     if (!md.exists()) { android.util.Log.w("SpecMission","claimReward: mission missing"); return null; }
@@ -449,7 +437,6 @@ public class SpecialMissionRepository {
                         invClothesSnap = tr.get(invClothesRef);
                     }
 
-                    // ===== COMPUTE PHASE =====
                     int curIdx = 1;
                     if (battle.exists()) {
                         Long ci = battle.getLong("currentBossIndex");
@@ -461,7 +448,6 @@ public class SpecialMissionRepository {
                     Long smw = userSnap.getLong("specialMissionsWon");
                     int newCount = (smw == null ? 0 : smw.intValue()) + 1;
 
-                    // ===== WRITE PHASE =====
                     Long finalCoins = coins;
                     tr.update(userRef, new HashMap<String,Object>() {{
                         put("coins", finalCoins + coinsAward);
@@ -537,11 +523,9 @@ public class SpecialMissionRepository {
             long now = System.currentTimeMillis();
             boolean missionEndedByTime = (endsAt != null && now >= endsAt);
             boolean bossDefeated = (bossHp != null && bossHp <= 0) || !Boolean.TRUE.equals(active);
-            // Novi uslov: bonus se NE ocenjuje dok misija još traje (aktivna i nije poražen boss i nije istekao rok)
             if (!(missionEndedByTime || bossDefeated)) { if (cb!=null) cb.onSuccess(null); return; }
 
             final long start = startedAt;
-            // Ako je misija završena istekom vremena koristimo planirani endsAt kao kraj prozora, inače trenutni trenutak/boss poraz
             final long end = missionEndedByTime && endsAt != null ? endsAt : now;
 
             FirebaseFirestore db = this.db;
@@ -573,7 +557,7 @@ public class SpecialMissionRepository {
                             long now2 = System.currentTimeMillis();
                             boolean missionEndedByTime2 = (endsAt2 != null && now2 >= endsAt2);
                             boolean bossDefeated2 = (bossHp2 != null && bossHp2 <= 0) || !Boolean.TRUE.equals(active2);
-                            if (!(missionEndedByTime2 || bossDefeated2)) return null; // još traje – ne dodeljuj
+                            if (!(missionEndedByTime2 || bossDefeated2)) return null;
 
                             DocumentReference pref = progressCol(allianceId).document(targetUid);
                             DocumentSnapshot pd = tr.get(pref);
