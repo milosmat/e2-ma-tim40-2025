@@ -62,6 +62,10 @@ public class Player {
         return createdAt;
     }
 
+    public void setCreatedAt(long createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public void setLastLevelUpAt(long lastLevelUpAt) {
         this.lastLevelUpAt = lastLevelUpAt;
     }

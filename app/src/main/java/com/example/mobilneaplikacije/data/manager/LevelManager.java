@@ -1,10 +1,14 @@
 package com.example.mobilneaplikacije.data.manager;
 
+import android.util.Log;
+
 import androidx.annotation.Nullable;
 
 import com.example.mobilneaplikacije.data.model.Player;
 import com.example.mobilneaplikacije.data.repository.PlayerRepository;
 import com.example.mobilneaplikacije.data.repository.TaskRepository;
+
+import java.util.Date;
 
 public class LevelManager {
 
@@ -41,8 +45,15 @@ public class LevelManager {
         boolean leveled = false;
         while (p.getXp() >= getXpForNextLevel(p.getLevel())) {
             long now = System.currentTimeMillis();
-            long stageStart = p.getLastLevelUpAt() > 0 ? p.getLastLevelUpAt() : p.getCreatedAt();
-
+            long stageStart = (p.getLevel() <= 1 )
+                    ? p.getCreatedAt()
+                    : p.getLastLevelUpAt();
+            Log.d("LevelUp", "Stage window: " + new Date(stageStart) + " → " + new Date(now));
+            if (p.getLevel() <= 1) {
+                Log.d("LevelUp", "(Level 1) Using createdAt=" + p.getCreatedAt() + " as stage start");
+            } else {
+                Log.d("LevelUp", "(Level>1) Using lastLevelUpAt=" + p.getLastLevelUpAt());
+            }
             taskRepo.calculateSuccessRate(stageStart, now, new TaskRepository.Callback<Double>() {
                 @Override public void onSuccess(Double successPercent) {
                     int pct = (successPercent == null) ? 50 : (int) Math.round(successPercent);

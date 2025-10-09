@@ -71,6 +71,26 @@ public class PlayerRepository {
                                 doc.getLong("coins") == null ? 0 : doc.getLong("coins").intValue(),
                                 doc.getDouble("successRate") == null ? 0.0 : doc.getDouble("successRate")
                         );
+                        // Učitaj originalni createdAt (server timestamp) umesto lokalnog trenutnog
+                        Object createdRaw = doc.get("createdAt");
+                        Long createdAtMillis = null;
+                        if (createdRaw instanceof com.google.firebase.Timestamp) {
+                            createdAtMillis = ((com.google.firebase.Timestamp) createdRaw).toDate().getTime();
+                        } else if (createdRaw instanceof java.util.Date) {
+                            createdAtMillis = ((java.util.Date) createdRaw).getTime();
+                        } else if (createdRaw instanceof Number) {
+                            createdAtMillis = ((Number) createdRaw).longValue();
+                        } else if (createdRaw != null) {
+                            android.util.Log.w("PlayerRepo", "createdAt unexpected type: " + createdRaw.getClass());
+                        }
+                        if (createdAtMillis != null) {
+                            p.setCreatedAt(createdAtMillis);
+                        } else {
+                            android.util.Log.w("PlayerRepo", "createdAt missing - using constructor time " + p.getCreatedAt());
+                        }
+                        Long lastUp = doc.getLong("lastLevelUpAt");
+                        if (lastUp != null) p.setLastLevelUpAt(lastUp);
+                        android.util.Log.d("PlayerRepo", "Loaded player createdAt=" + p.getCreatedAt() + ", lastLevelUpAt=" + p.getLastLevelUpAt());
                         cachedPlayer = p;
                         cachedUid = uid;
                         callback.onSuccess(p);
@@ -142,7 +162,7 @@ public class PlayerRepository {
         }
         if (cachedPlayer == null) return;
 
-        db.collection("users").document(uid)
+    db.collection("users").document(uid)
                 .update("username", cachedPlayer.getUsername(),
                         "avatar", cachedPlayer.getAvatar(),
                         "level", cachedPlayer.getLevel(),
@@ -150,7 +170,7 @@ public class PlayerRepository {
                         "pp", cachedPlayer.getPp(),
                         "xp", cachedPlayer.getXp(),
                         "coins", cachedPlayer.getCoins(),
-                        "successRate", cachedPlayer.getSuccessRate());
+            "lastLevelUpAt", cachedPlayer.getLastLevelUpAt());
     }
   
     public void getCurrentPP(LongCallback cb) {
